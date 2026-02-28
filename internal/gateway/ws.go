@@ -115,8 +115,8 @@ func (c *Client) Connect() error {
 		ID:     c.nextID(),
 		Method: "connect",
 		Params: ConnectParams{
-			MinProtocol: 1,
-			MaxProtocol: 1,
+			MinProtocol: 3,
+			MaxProtocol: 3,
 			Client: ClientInfo{
 				ID:          "gateway-client",
 				DisplayName: "Kapso WhatsApp Bridge",
