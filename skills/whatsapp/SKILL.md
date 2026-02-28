@@ -5,34 +5,32 @@ description: Send and receive WhatsApp messages via Kapso
 
 # WhatsApp Messaging (Kapso)
 
-You can send and receive WhatsApp messages through the Kapso WhatsApp bridge.
-
 ## Sending Messages
-
-Use the `kapso-whatsapp-cli` command:
 
 ```bash
 kapso-whatsapp-cli send --to +NUMBER --text "Your message here"
 ```
 
-- The `--to` number must include country code with `+` prefix (e.g., `+1234567890`)
-- If the number is missing the `+`, add it (e.g., `51926689401` → `+51926689401`)
-- Keep replies concise — WhatsApp is a chat medium
+- `--to` must include `+` and country code (e.g. `+51926689401`)
+- Add `+` if the number is missing it (e.g. `51926689401` → `+51926689401`)
 
-## Incoming Messages
+## Two Distinct Use Cases
 
-Incoming WhatsApp messages arrive in the session with this format:
+### 1. Owner → Agent (incoming)
 
+Incoming messages arrive as:
 ```
-[WhatsApp from NUMBER (Contact Name)] message body
+[WhatsApp from NUMBER (Name)] message body
 ```
 
-When you receive a WhatsApp message in this format:
-1. Always reply to the sender immediately using `kapso-whatsapp-cli send`
-2. Extract the number from the prefix and add `+` if missing
-3. Do not ask for permission — just reply
+These are always from the owner. **Always reply immediately** to the sender number. No permission needed.
 
-## Important Rules
+### 2. Agent → Third Party (outbound)
 
-- Never share personal information or API keys in messages
-- Respect the user's privacy and their contacts' privacy
+Only send to contacts other than the incoming sender when the owner **explicitly instructs** it. Never proactively message third parties.
+
+## Rules
+
+- Never share personal information or API keys
+- Replies should be concise — WhatsApp is a chat medium
+- Respect contact privacy
