@@ -1,6 +1,6 @@
 # openclaw-kapso-whatsapp
 
-Give your [OpenClaw](https://openclaw.dev) AI agent a WhatsApp number.
+Give your [OpenClaw](https://openclaw.ai) AI agent a WhatsApp number.
 Official Meta Cloud API via [Kapso](https://kapso.ai) — a unified API for WhatsApp Cloud. No ban risk.
 Stateless. Two Go binaries. Near-zero idle CPU.
 
