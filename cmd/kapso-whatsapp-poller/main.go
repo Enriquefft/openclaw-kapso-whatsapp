@@ -645,7 +645,7 @@ return strings.ToLower(mode)
 
 switch strings.ToLower(legacyMode) {
 case "webhook", "both":
-log.Printf("KAPSO_WEBHOOK_MODE is deprecated - use KAPSO_MODE=domain or KAPSO_MODE=tailscale instead")
+log.Printf("KAPSO_WEBHOOK_MODE is deprecated — use KAPSO_MODE=domain or KAPSO_MODE=tailscale instead")
 return "domain"
 }
 
@@ -670,7 +670,7 @@ select {
 case <-done:
 case <-time.After(5 * time.Second):
 log.Printf("tailscale funnel did not exit, sending SIGKILL")
-proc.Signal(syscall.SIGKILL)
+proc.Kill()
 }
 }
 
