@@ -23,20 +23,11 @@ type ListMessagesResponse struct {
 }
 
 // InboundMessage represents a message from the list API.
+// It embeds Message to promote shared fields (ID, From, Type, Text, Image, etc.).
 type InboundMessage struct {
-	ID        string           `json:"id"`
-	Timestamp string           `json:"timestamp"`
-	Type      string           `json:"type"`
-	From      string           `json:"from"`
-	To        string           `json:"to"`
-	Text      *TextContent     `json:"text,omitempty"`
-	Image     *ImageContent    `json:"image,omitempty"`
-	Document  *DocumentContent `json:"document,omitempty"`
-	Audio     *AudioContent    `json:"audio,omitempty"`
-	Video     *VideoContent    `json:"video,omitempty"`
-	Sticker   *StickerContent  `json:"sticker,omitempty"`
-	Location  *LocationContent `json:"location,omitempty"`
-	Kapso     *KapsoMeta       `json:"kapso,omitempty"`
+	Message                          // promotes ID, From, Type, Text, Image, etc.
+	To    string     `json:"to,omitempty"`
+	Kapso *KapsoMeta `json:"kapso,omitempty"`
 }
 
 // KapsoMeta contains Kapso-enhanced metadata.
