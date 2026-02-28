@@ -64,7 +64,7 @@ func StartFunnel(port string) (webhookURL string, proc *os.Process, err error) {
 	cmd.Stderr = os.Stderr
 
 	if err := cmd.Start(); err != nil {
-		return "", nil, fmt.Errorf("start tailscale funnel: %w", err)
+		return "", nil, fmt.Errorf("start tailscale funnel: %w (check that funnel is enabled — see `tailscale funnel --help`)", err)
 	}
 
 	webhookURL = baseURL + "/webhook"

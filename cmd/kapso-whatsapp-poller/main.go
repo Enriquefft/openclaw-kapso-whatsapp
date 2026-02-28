@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -127,7 +128,11 @@ func main() {
 
 		// In tailscale mode, auto-start Tailscale Funnel.
 		if mode == "tailscale" {
-			port := strings.TrimPrefix(webhookAddr, ":")
+			_, port, err := net.SplitHostPort(webhookAddr)
+			if err != nil {
+				// webhookAddr might be just ":18790" or "18790".
+				port = strings.TrimPrefix(webhookAddr, ":")
+			}
 			webhookURL, proc, err := tailscale.StartFunnel(port)
 			if err != nil {
 				log.Fatalf("tailscale funnel: %v", err)
@@ -524,10 +529,25 @@ func resolveMode(mode, legacyMode string) string {
 	return "polling"
 }
 
-// cleanupFunnel kills the tailscale funnel process if it was started.
+// cleanupFunnel gracefully stops the tailscale funnel process if it was started.
 func cleanupFunnel(proc *os.Process) {
-	if proc != nil {
-		log.Printf("stopping tailscale funnel (pid %d)", proc.Pid)
+	if proc == nil {
+		return
+	}
+	log.Printf("stopping tailscale funnel (pid %d)", proc.Pid)
+	proc.Signal(syscall.SIGTERM)
+
+	// Give it a moment to exit gracefully before force-killing.
+	done := make(chan struct{})
+	go func() {
+		proc.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		log.Printf("tailscale funnel did not exit, sending SIGKILL")
 		proc.Kill()
 	}
 }
