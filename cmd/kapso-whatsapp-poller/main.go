@@ -10,6 +10,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -27,6 +28,36 @@ var (
 	reHeading    = regexp.MustCompile(`(?m)^#{1,3} +(.+)$`)
 	reBlockquote = regexp.MustCompile(`(?m)^> ?`)
 )
+
+// relayTracker prevents concurrent relay goroutines from claiming the same
+// assistant reply in the session JSONL. Each reply is identified by a unique
+// key (session file path + line number) and can only be claimed once.
+type relayTracker struct {
+	mu      sync.Mutex
+	claimed map[string]bool
+}
+
+func newRelayTracker() *relayTracker {
+	return &relayTracker{claimed: make(map[string]bool)}
+}
+
+// claim attempts to exclusively claim a reply identified by key.
+// Returns true on success (first caller wins), false if already claimed.
+func (rt *relayTracker) claim(key string) bool {
+	rt.mu.Lock()
+	defer rt.mu.Unlock()
+	if rt.claimed[key] {
+		return false
+	}
+	rt.claimed[key] = true
+	return true
+}
+
+// assistantReply pairs a unique claim key with the reply text.
+type assistantReply struct {
+	Key  string
+	Text string
+}
 
 func main() {
 	apiKey := os.Getenv("KAPSO_API_KEY")
@@ -72,6 +103,8 @@ func main() {
 
 	log.Printf("polling every %ds, gateway=%s session=%s", interval, gatewayURL, sessionKey)
 
+	tracker := newRelayTracker()
+
 	// Graceful shutdown.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
@@ -80,12 +113,12 @@ func main() {
 	defer ticker.Stop()
 
 	// Poll immediately on start, then on interval.
-	poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll)
+	poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, tracker)
 
 	for {
 		select {
 		case <-ticker.C:
-			poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll)
+			poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, tracker)
 		case sig := <-stop:
 			log.Printf("received %s, shutting down", sig)
 			return
@@ -93,7 +126,7 @@ func main() {
 	}
 }
 
-func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, stateFile string, lastPoll *time.Time) {
+func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, stateFile string, lastPoll *time.Time, tracker *relayTracker) {
 	since := lastPoll.Format(time.RFC3339)
 
 	resp, err := client.ListMessages(kapso.ListMessagesParams{
@@ -143,7 +176,7 @@ func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, st
 		// Automatically relay the agent's reply back to the WhatsApp sender.
 		// This mirrors what the TUI does: the agent just responds in text,
 		// and we deliver it — no exec call needed from the agent.
-		go waitAndRelay(sessionsJSON, sessionKey, msg.From, sendAt, client)
+		go waitAndRelay(sessionsJSON, sessionKey, msg.From, sendAt, client, tracker)
 
 		if !msgTime.IsZero() && msgTime.After(newest) {
 			newest = msgTime
@@ -268,7 +301,7 @@ func notifyUnsupported(from, msgType string, client *kapso.Client) {
 
 // waitAndRelay polls the session JSONL until the agent produces a reply, then
 // sends it back to the WhatsApp sender automatically.
-func waitAndRelay(sessionsJSON, sessionKey, from string, since time.Time, client *kapso.Client) {
+func waitAndRelay(sessionsJSON, sessionKey, from string, since time.Time, client *kapso.Client, tracker *relayTracker) {
 	to := from
 	if !strings.HasPrefix(to, "+") {
 		to = "+" + to
@@ -292,10 +325,18 @@ func waitAndRelay(sessionsJSON, sessionKey, from string, since time.Time, client
 			continue
 		}
 
-		text, err := getAssistantReply(sessionFile, since)
+		replies, err := getAssistantReplies(sessionFile, since)
 		if err != nil {
 			log.Printf("relay: error reading session: %v", err)
 			continue
+		}
+
+		var text string
+		for _, r := range replies {
+			if tracker.claim(r.Key) {
+				text = r.Text
+				break
+			}
 		}
 		if text == "" {
 			continue
@@ -344,16 +385,17 @@ func getSessionFile(sessionsJSON, sessionKey string) (string, error) {
 	return "", fmt.Errorf("no session file found for key %q in %s", sessionKey, sessionsJSON)
 }
 
-// getAssistantReply scans the session JSONL for the most recent assistant
-// message with stopReason=stop that was recorded after `since`.
-func getAssistantReply(sessionFile string, since time.Time) (string, error) {
+// getAssistantReplies scans the session JSONL for all assistant messages with
+// stopReason=stop that were recorded after `since`. Each reply is tagged with a
+// unique key (file path + line number) so relay goroutines can claim exactly one.
+func getAssistantReplies(sessionFile string, since time.Time) ([]assistantReply, error) {
 	data, err := os.ReadFile(sessionFile)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 
-	var lastText string
-	for _, line := range strings.Split(string(data), "\n") {
+	var replies []assistantReply
+	for i, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
@@ -390,11 +432,14 @@ func getAssistantReply(sessionFile string, since time.Time) (string, error) {
 			}
 		}
 		if len(texts) > 0 {
-			lastText = strings.Join(texts, "\n")
+			replies = append(replies, assistantReply{
+				Key:  fmt.Sprintf("%s:%d", sessionFile, i),
+				Text: strings.Join(texts, "\n"),
+			})
 		}
 	}
 
-	return lastText, nil
+	return replies, nil
 }
 
 // buildMessage passes through only the raw message body — transport context is

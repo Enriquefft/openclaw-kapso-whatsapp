@@ -5,11 +5,90 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
 )
+
+// TestConcurrentRelayClaimsUniqueReplies verifies that when multiple relay
+// goroutines race to read the same session JSONL file, each one claims a
+// different assistant reply — no duplicates, no missed replies.
+func TestConcurrentRelayClaimsUniqueReplies(t *testing.T) {
+	// Create a temp session JSONL with 3 assistant replies, all timestamped
+	// after our "since" threshold.
+	dir := t.TempDir()
+	sessionFile := filepath.Join(dir, "session.jsonl")
+
+	base := time.Date(2026, 1, 1, 12, 0, 0, 0, time.UTC)
+
+	// Three assistant stop-messages, each 1 second apart.
+	lines := ""
+	for i := 0; i < 3; i++ {
+		ts := base.Add(time.Duration(i+1) * time.Second)
+		lines += fmt.Sprintf(
+			`{"type":"message","timestamp":"%s","message":{"role":"assistant","stopReason":"stop","content":[{"type":"text","text":"reply-%d"}]}}`,
+			ts.Format(time.RFC3339), i+1,
+		) + "\n"
+	}
+	if err := os.WriteFile(sessionFile, []byte(lines), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	since := base // all replies are after this time
+	tracker := newRelayTracker()
+
+	// Simulate 3 concurrent relay goroutines racing to claim replies.
+	const goroutines = 3
+	claimed := make([]string, goroutines)
+	var wg sync.WaitGroup
+	wg.Add(goroutines)
+
+	for g := 0; g < goroutines; g++ {
+		g := g
+		go func() {
+			defer wg.Done()
+			replies, err := getAssistantReplies(sessionFile, since)
+			if err != nil {
+				t.Errorf("goroutine %d: getAssistantReplies: %v", g, err)
+				return
+			}
+			for _, r := range replies {
+				if tracker.claim(r.Key) {
+					claimed[g] = r.Text
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+
+	// Collect results: every goroutine should have claimed exactly one
+	// unique reply.
+	seen := map[string]int{}
+	for g, text := range claimed {
+		if text == "" {
+			t.Errorf("goroutine %d got no reply", g)
+			continue
+		}
+		seen[text]++
+	}
+
+	for text, count := range seen {
+		if count > 1 {
+			t.Errorf("reply %q was claimed %d times (want 1)", text, count)
+		}
+	}
+
+	if len(seen) != goroutines {
+		t.Errorf("expected %d unique replies, got %d: %v", goroutines, len(seen), seen)
+	}
+}
 
 func TestExtractMessageText_Text(t *testing.T) {
 	msg := kapso.InboundMessage{
@@ -223,12 +302,16 @@ func TestExtractMessageText_Location(t *testing.T) {
 
 func TestExtractMessageText_UnsupportedType(t *testing.T) {
 	// Create a mock server to capture the unsupported-type notification.
-	var sentTo, sentBody string
+	// Use a channel to synchronize between the HTTP handler goroutine and
+	// the test goroutine, avoiding a data race on sentTo/sentBody.
+	type capture struct {
+		to, body string
+	}
+	ch := make(chan capture, 2)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req kapso.SendMessageRequest
 		json.NewDecoder(r.Body).Decode(&req)
-		sentTo = req.To
-		sentBody = req.Text.Body
+		ch <- capture{to: req.To, body: req.Text.Body}
 		json.NewEncoder(w).Encode(kapso.SendMessageResponse{})
 	}))
 	defer srv.Close()
@@ -253,14 +336,14 @@ func TestExtractMessageText_UnsupportedType(t *testing.T) {
 		t.Fatal("expected ok=false for unsupported sticker type")
 	}
 
-	// Give the goroutine time to send the notification.
-	// In tests, we call notifyUnsupported synchronously to check.
-	notifyUnsupported(msg.From, msg.Type, client)
-	if sentTo != "+1234567890" {
-		t.Errorf("notification sent to %q, want %q", sentTo, "+1234567890")
+	// Wait for the background goroutine spawned by extractMessageText to
+	// send the unsupported-type notification.
+	got := <-ch
+	if got.to != "+1234567890" {
+		t.Errorf("notification sent to %q, want %q", got.to, "+1234567890")
 	}
-	if !strings.Contains(sentBody, "sticker") {
-		t.Errorf("notification body %q should mention sticker", sentBody)
+	if !strings.Contains(got.body, "sticker") {
+		t.Errorf("notification body %q should mention sticker", got.body)
 	}
 }
 
