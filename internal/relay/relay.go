@@ -59,14 +59,13 @@ type assistantReply struct {
 // Relay sends agent replies back to WhatsApp senders.
 type Relay struct {
 	SessionsJSON string
-	SessionKey   string
 	Client       *kapso.Client
 	Tracker      *Tracker
 }
 
 // Send polls the session JSONL until the agent produces a reply, then sends it
 // back to the WhatsApp sender. It respects ctx cancellation.
-func (r *Relay) Send(ctx context.Context, from string, since time.Time) {
+func (r *Relay) Send(ctx context.Context, from, sessionKey string, since time.Time) {
 	to := from
 	if !strings.HasPrefix(to, "+") {
 		to = "+" + to
@@ -88,7 +87,7 @@ func (r *Relay) Send(ctx context.Context, from string, since time.Time) {
 		case <-ticker.C:
 		}
 
-		sessionFile, err := getSessionFile(r.SessionsJSON, r.SessionKey)
+		sessionFile, err := getSessionFile(r.SessionsJSON, sessionKey)
 		if err != nil {
 			log.Printf("relay: %v", err)
 			continue

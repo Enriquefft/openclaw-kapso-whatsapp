@@ -1,6 +1,7 @@
 package config
 
 import (
+	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,6 +17,7 @@ type Config struct {
 	Webhook  WebhookConfig  `toml:"webhook"`
 	Gateway  GatewayConfig  `toml:"gateway"`
 	State    StateConfig    `toml:"state"`
+	Security SecurityConfig `toml:"security"`
 }
 
 type KapsoConfig struct {
@@ -46,6 +48,16 @@ type StateConfig struct {
 	Dir string `toml:"dir"`
 }
 
+type SecurityConfig struct {
+	Mode             string              `toml:"mode"`
+	Roles            map[string][]string `toml:"roles"`
+	DenyMessage      string              `toml:"deny_message"`
+	RateLimit        int                 `toml:"rate_limit"`
+	RateWindow       int                 `toml:"rate_window"`
+	SessionIsolation bool                `toml:"session_isolation"`
+	DefaultRole      string              `toml:"default_role"`
+}
+
 func defaults() Config {
 	home := os.Getenv("HOME")
 	return Config{
@@ -63,6 +75,14 @@ func defaults() Config {
 		},
 		State: StateConfig{
 			Dir: filepath.Join(home, ".config", "kapso-whatsapp"),
+		},
+		Security: SecurityConfig{
+			Mode:             "allowlist",
+			DenyMessage:      "Sorry, you are not authorized to use this service.",
+			RateLimit:        10,
+			RateWindow:       60,
+			SessionIsolation: true,
+			DefaultRole:      "member",
 		},
 	}
 }
@@ -146,6 +166,48 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("KAPSO_STATE_DIR"); v != "" {
 		cfg.State.Dir = v
 	}
+
+	// Security overrides.
+	if v := os.Getenv("KAPSO_SECURITY_MODE"); v != "" {
+		cfg.Security.Mode = v
+	}
+	if v := os.Getenv("KAPSO_DENY_MESSAGE"); v != "" {
+		cfg.Security.DenyMessage = v
+	}
+	if v := os.Getenv("KAPSO_RATE_LIMIT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Security.RateLimit = n
+		}
+	}
+	if v := os.Getenv("KAPSO_RATE_WINDOW"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			cfg.Security.RateWindow = n
+		}
+	}
+	if v := os.Getenv("KAPSO_SESSION_ISOLATION"); v != "" {
+		cfg.Security.SessionIsolation = v == "true"
+	}
+	if v := os.Getenv("KAPSO_DEFAULT_ROLE"); v != "" {
+		cfg.Security.DefaultRole = v
+	}
+	if v := os.Getenv("KAPSO_ALLOWED_NUMBERS"); v != "" {
+		// Convenience: comma-separated numbers all get default_role.
+		nums := strings.Split(v, ",")
+		role := cfg.Security.DefaultRole
+		if cfg.Security.Roles == nil {
+			cfg.Security.Roles = make(map[string][]string)
+		}
+		for _, n := range nums {
+			n = strings.TrimSpace(n)
+			if n == "" {
+				continue
+			}
+			// Only add if not already present in any TOML role.
+			if !phoneInRoles(cfg.Security.Roles, n) {
+				cfg.Security.Roles[role] = append(cfg.Security.Roles[role], n)
+			}
+		}
+	}
 }
 
 // resolveMode normalises the delivery mode from KAPSO_MODE (preferred) or
@@ -178,7 +240,55 @@ func (c *Config) Validate() error {
 		c.Delivery.Mode = "polling"
 	}
 
+	// Security validation.
+	switch c.Security.Mode {
+	case "allowlist", "open":
+	default:
+		c.Security.Mode = "allowlist"
+	}
+
+	if c.Security.RateLimit < 1 {
+		c.Security.RateLimit = 1
+	}
+	if c.Security.RateWindow < 10 {
+		c.Security.RateWindow = 10
+	}
+
+	if c.Security.Mode == "allowlist" {
+		total := 0
+		for _, nums := range c.Security.Roles {
+			total += len(nums)
+		}
+		if total == 0 {
+			log.Printf("warning: security mode is \"allowlist\" but no numbers configured — all messages will be rejected")
+		}
+	}
+
+	// Warn about duplicate numbers across roles.
+	seen := make(map[string]string)
+	for role, nums := range c.Security.Roles {
+		for _, phone := range nums {
+			if prev, exists := seen[phone]; exists {
+				log.Printf("warning: phone %s appears in both roles %q and %q — %q wins", phone, prev, role, prev)
+			} else {
+				seen[phone] = role
+			}
+		}
+	}
+
 	return nil
+}
+
+// phoneInRoles checks if a phone number already exists in any role's list.
+func phoneInRoles(roles map[string][]string, phone string) bool {
+	for _, nums := range roles {
+		for _, n := range nums {
+			if n == phone {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func expandHome(path string) string {

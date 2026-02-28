@@ -96,6 +96,51 @@ These are the only values you typically need to set as env vars:
 
 All other settings have sensible defaults and belong in the config file if you need to change them.
 
+### Security
+
+The bridge enforces sender allowlisting, per-sender rate limiting, role tagging, and session isolation. By default, security mode is `allowlist` — only phone numbers listed in `[security.roles]` can interact with the agent.
+
+#### Config file
+
+```toml
+[security]
+mode = "allowlist"                    # "allowlist" | "open"
+deny_message = "Sorry, you are not authorized to use this service."
+rate_limit = 10                       # max messages per window per sender
+rate_window = 60                      # window in seconds
+session_isolation = true              # per-sender sessions (false = shared)
+default_role = "member"               # role for unlisted senders in "open" mode
+
+[security.roles]
+admin = ["+1234567890"]
+member = ["+0987654321", "+1122334455"]
+```
+
+Each role maps to a list of phone numbers. The agent receives a `[role: <role>]` tag in every forwarded message, enabling role-based capability enforcement in SKILL.md.
+
+#### Environment variables
+
+For simple setups without roles:
+
+| Variable | Description |
+|---|---|
+| `KAPSO_SECURITY_MODE` | `"allowlist"` or `"open"` |
+| `KAPSO_ALLOWED_NUMBERS` | Comma-separated phone numbers (all get `default_role`) |
+| `KAPSO_DENY_MESSAGE` | Message sent to unauthorized senders |
+| `KAPSO_RATE_LIMIT` | Max messages per window per sender |
+| `KAPSO_RATE_WINDOW` | Rate limit window in seconds |
+| `KAPSO_SESSION_ISOLATION` | `"true"` or `"false"` |
+| `KAPSO_DEFAULT_ROLE` | Role for senders not in the roles map |
+
+If a number appears in both `KAPSO_ALLOWED_NUMBERS` and the TOML `[security.roles]`, the TOML role wins.
+
+#### Behavior
+
+- **Allowlist mode** (default): Only numbers in `[security.roles]` can send messages. Unauthorized senders receive the deny message.
+- **Open mode**: Anyone can send. Senders not in the roles map get `default_role`.
+- **Rate limiting**: Fixed-window token bucket per sender. Excess messages are silently dropped (no response to avoid amplification).
+- **Session isolation** (default on): Each sender gets their own OpenClaw session (`main-wa-<number>`), preventing cross-sender context leakage.
+
 ### Delivery modes
 
 #### Polling (default)

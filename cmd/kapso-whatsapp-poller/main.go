@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/gateway"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/relay"
+	"github.com/hybridz/openclaw-kapso-whatsapp/internal/security"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/tailscale"
 )
 
@@ -112,20 +114,46 @@ func main() {
 	// Relay agent replies back to WhatsApp.
 	rel := &relay.Relay{
 		SessionsJSON: cfg.Gateway.SessionsJSON,
-		SessionKey:   cfg.Gateway.SessionKey,
 		Client:       client,
 		Tracker:      relay.NewTracker(),
 	}
 
+	// Security guard.
+	guard := security.New(cfg.Security)
+	log.Printf("security: mode=%s, session_isolation=%v, rate_limit=%d/%ds",
+		cfg.Security.Mode, cfg.Security.SessionIsolation,
+		cfg.Security.RateLimit, cfg.Security.RateWindow)
+
 	// Consume loop — identical for all sources.
 	go func() {
 		for evt := range events {
-			if err := gw.Send(cfg.Gateway.SessionKey, evt.ID, evt.Text); err != nil {
+			verdict := guard.Check(evt.From)
+			switch verdict {
+			case security.Deny:
+				log.Printf("guard: blocked unauthorized sender %s", evt.From)
+				if msg := guard.DenyMessage(); msg != "" {
+					if _, err := client.SendText(evt.From, msg); err != nil {
+						log.Printf("guard: failed to send deny message to %s: %v", evt.From, err)
+					}
+				}
+				continue
+			case security.RateLimited:
+				log.Printf("guard: rate limited sender %s", evt.From)
+				continue
+			}
+
+			role := guard.Role(evt.From)
+			sessionKey := guard.SessionKey(cfg.Gateway.SessionKey, evt.From)
+
+			// Tag message with sender info and role.
+			taggedText := fmt.Sprintf("From: %s (%s) [role: %s]\n%s", evt.From, evt.Name, role, evt.Text)
+
+			if err := gw.Send(sessionKey, evt.ID, taggedText); err != nil {
 				log.Printf("error forwarding message %s: %v", evt.ID, err)
 				continue
 			}
-			log.Printf("forwarded message %s from %s", evt.ID, evt.From)
-			go rel.Send(ctx, evt.From, time.Now().UTC())
+			log.Printf("forwarded message %s from %s [role: %s, session: %s]", evt.ID, evt.From, role, sessionKey)
+			go rel.Send(ctx, evt.From, sessionKey, time.Now().UTC())
 		}
 	}()
 

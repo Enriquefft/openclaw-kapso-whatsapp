@@ -21,6 +21,16 @@ let
     state = {
       dir = cfg.state.dir;
     };
+    security = {
+      mode = cfg.security.mode;
+      deny_message = cfg.security.denyMessage;
+      rate_limit = cfg.security.rateLimit;
+      rate_window = cfg.security.rateWindow;
+      session_isolation = cfg.security.sessionIsolation;
+      default_role = cfg.security.defaultRole;
+    } // lib.optionalAttrs (cfg.security.roles != {}) {
+      roles = cfg.security.roles;
+    };
   };
 
   # Script that reads secret files and exports them as env vars before exec.
@@ -111,6 +121,54 @@ in {
         type = types.str;
         default = "${config.home.homeDirectory}/.config/kapso-whatsapp";
         description = "Directory for state files (last-poll timestamp, etc.).";
+      };
+    };
+
+    security = {
+      mode = mkOption {
+        type = types.enum [ "allowlist" "open" ];
+        default = "allowlist";
+        description = "Security mode. 'allowlist' only allows numbers in roles. 'open' allows anyone.";
+      };
+
+      roles = mkOption {
+        type = types.attrsOf (types.listOf types.str);
+        default = { };
+        example = {
+          admin = [ "+1234567890" ];
+          member = [ "+0987654321" "+1122334455" ];
+        };
+        description = "Role-grouped phone number allowlist. Each role maps to a list of phone numbers.";
+      };
+
+      denyMessage = mkOption {
+        type = types.str;
+        default = "Sorry, you are not authorized to use this service.";
+        description = "Message sent to unauthorized senders.";
+      };
+
+      rateLimit = mkOption {
+        type = types.int;
+        default = 10;
+        description = "Maximum messages per rate window per sender.";
+      };
+
+      rateWindow = mkOption {
+        type = types.int;
+        default = 60;
+        description = "Rate limit window in seconds.";
+      };
+
+      sessionIsolation = mkOption {
+        type = types.bool;
+        default = true;
+        description = "Give each sender their own OpenClaw session.";
+      };
+
+      defaultRole = mkOption {
+        type = types.str;
+        default = "member";
+        description = "Role assigned to senders not in the roles map (used in 'open' mode).";
       };
     };
 
