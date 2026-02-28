@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 	"syscall"
@@ -14,6 +15,17 @@ import (
 
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/gateway"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+)
+
+const waMaxLen = 4096
+
+// Compiled regexes for mdToWhatsApp – compiled once at startup.
+var (
+	reBold       = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	reItalic     = regexp.MustCompile(`\*(.+?)\*`)
+	reStrike     = regexp.MustCompile(`~~(.+?)~~`)
+	reHeading    = regexp.MustCompile(`(?m)^#{1,3} +(.+)$`)
+	reBlockquote = regexp.MustCompile(`(?m)^> ?`)
 )
 
 func main() {
@@ -183,11 +195,14 @@ func waitAndRelay(sessionsJSON, sessionKey, from string, since time.Time, client
 			continue
 		}
 
-		if _, err := client.SendText(to, text); err != nil {
-			log.Printf("relay: failed to send WhatsApp reply to %s: %v", to, err)
-		} else {
-			log.Printf("relay: sent reply to %s", to)
+		text = mdToWhatsApp(text)
+		chunks := splitMessage(text, waMaxLen)
+		for _, chunk := range chunks {
+			if _, err := client.SendText(to, chunk); err != nil {
+				log.Printf("relay: failed to send WhatsApp chunk to %s: %v", to, err)
+			}
 		}
+		log.Printf("relay: sent %d chunk(s) to %s", len(chunks), to)
 		return
 	}
 }
@@ -276,20 +291,99 @@ func getAssistantReply(sessionFile string, since time.Time) (string, error) {
 	return lastText, nil
 }
 
-// buildMessage formats an inbound WhatsApp message for the agent, embedding
-// the sender's number and name so the agent has context for who it's talking to.
-func buildMessage(from, name, body string) string {
-	var sb strings.Builder
-	sb.WriteString("[WhatsApp from ")
-	sb.WriteString(from)
-	if name != "" {
-		sb.WriteString(" (")
-		sb.WriteString(name)
-		sb.WriteString(")")
+// buildMessage passes through only the raw message body — transport context is
+// handled by the bridge, not the agent.
+func buildMessage(_, _, body string) string {
+	return body
+}
+
+// mdToWhatsApp converts Markdown formatting to WhatsApp-compatible formatting.
+// Conversion order avoids regex conflicts between bold and italic markers.
+func mdToWhatsApp(text string) string {
+	const boldMarker = "\x01"
+
+	// 1. Replace **bold** with placeholder to avoid conflicts with *italic*
+	result := reBold.ReplaceAllString(text, boldMarker+"$1"+boldMarker)
+
+	// 2. Convert *italic* → _italic_
+	result = reItalic.ReplaceAllString(result, "_$1_")
+
+	// 3. Restore bold placeholders as *bold*
+	result = strings.ReplaceAll(result, boldMarker, "*")
+
+	// 4. Convert ~~strikethrough~~ → ~strikethrough~
+	result = reStrike.ReplaceAllString(result, "~$1~")
+
+	// 5. Convert headings (# / ## / ###) → *Heading*
+	result = reHeading.ReplaceAllString(result, "*$1*")
+
+	// 6. Strip blockquote markers
+	result = reBlockquote.ReplaceAllString(result, "")
+
+	return result
+}
+
+// splitMessage splits text into chunks of at most maxLen bytes, breaking at
+// clean boundaries in priority order: paragraph, newline, sentence, word, hard cut.
+// Each chunk is trimmed of leading/trailing whitespace.
+func splitMessage(text string, maxLen int) []string {
+	if len(text) <= maxLen {
+		return []string{text}
 	}
-	sb.WriteString("] ")
-	sb.WriteString(body)
-	return sb.String()
+
+	minSplit := maxLen / 4
+	var chunks []string
+
+	for len(text) > maxLen {
+		chunk := text[:maxLen]
+
+		// Priority 1: paragraph break.
+		if i := strings.LastIndex(chunk, "\n\n"); i >= minSplit {
+			chunks = append(chunks, strings.TrimSpace(text[:i]))
+			text = strings.TrimSpace(text[i:])
+			continue
+		}
+
+		// Priority 2: single newline.
+		if i := strings.LastIndex(chunk, "\n"); i >= minSplit {
+			chunks = append(chunks, strings.TrimSpace(text[:i]))
+			text = strings.TrimSpace(text[i:])
+			continue
+		}
+
+		// Priority 3: sentence ending (includes punctuation, drops trailing space).
+		splitPos := -1
+		for _, sep := range []string{". ", "? ", "! "} {
+			if i := strings.LastIndex(chunk, sep); i >= minSplit {
+				pos := i + 1 // include punctuation, exclude the space
+				if pos > splitPos {
+					splitPos = pos
+				}
+			}
+		}
+		if splitPos >= 0 {
+			chunks = append(chunks, strings.TrimSpace(text[:splitPos]))
+			text = strings.TrimSpace(text[splitPos:])
+			continue
+		}
+
+		// Priority 4: word boundary.
+		if i := strings.LastIndex(chunk, " "); i >= minSplit {
+			chunks = append(chunks, strings.TrimSpace(text[:i]))
+			text = strings.TrimSpace(text[i:])
+			continue
+		}
+
+		// Priority 5: hard cut.
+		chunks = append(chunks, strings.TrimSpace(text[:maxLen]))
+		text = strings.TrimSpace(text[maxLen:])
+	}
+
+	if text != "" {
+		chunks = append(chunks, strings.TrimSpace(text))
+	}
+
+	return chunks
 }
 
 // parseTimestamp parses a message timestamp that may be either RFC3339
