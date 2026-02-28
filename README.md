@@ -12,10 +12,10 @@ Stateless. Two Go binaries. Near-zero idle CPU.
 ## Architecture
 
 ```
-WhatsApp  ──→  Kapso API  ──→  kapso-whatsapp-poller  ──→  OpenClaw Gateway  ──→  AI Agent
-   ↑                                     │
-   └─────────────────────────────────────┘
-                  relay: reads session JSONL, sends reply back
+WhatsApp --> Kapso API --> kapso-whatsapp-poller --> OpenClaw Gateway --> AI Agent
+   ^                                |
+   +--------------------------------+
+          relay: reads session JSONL, sends reply back
 ```
 
 Three delivery modes: **polling** (zero-config), **Tailscale Funnel** (auto-tunnel), or **your own domain**.
@@ -200,11 +200,11 @@ If a number appears in both `KAPSO_ALLOWED_NUMBERS` and the TOML `[security.role
 Works out of the box — no public endpoint, no domain, no tunnel. Polls every 30 seconds with up to 30s latency on incoming messages.
 
 ```
-kapso-whatsapp-poller  ──poll──→  Kapso REST API
-       │                               │
-       │  (new messages)                │
-       ▼                               │
-  OpenClaw Gateway  ──reply──→  kapso-whatsapp-cli  ──→  Kapso API  ──→  WhatsApp
+kapso-whatsapp-poller  --poll-->  Kapso REST API
+       |                               |
+       |  (new messages)               |
+       v                               |
+  OpenClaw Gateway  --reply-->  kapso-whatsapp-cli  -->  Kapso API  -->  WhatsApp
 ```
 
 No extra config needed — just set the two required env vars.
@@ -214,11 +214,11 @@ No extra config needed — just set the two required env vars.
 Real-time delivery (< 1s latency) without owning a domain. The poller starts [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) automatically and prints the webhook URL to register in Kapso. Tailscale Funnel works on the free plan.
 
 ```
-Kapso webhook POST  ──→  https://<machine>.<tailnet>.ts.net/webhook
-                               │  (tailscale funnel, auto-started)
+Kapso webhook POST  -->  https://<machine>.<tailnet>.ts.net/webhook
+                               |  (tailscale funnel, auto-started)
                           Webhook server (:18790)
-                               │
-                          OpenClaw Gateway  ──reply──→  Kapso API  ──→  WhatsApp
+                               |
+                          OpenClaw Gateway  --reply-->  Kapso API  -->  WhatsApp
 ```
 
 **Prerequisites:** Tailscale installed and running (`tailscale up`), HTTPS certs enabled (`tailscale cert`).
@@ -237,11 +237,11 @@ Plus set `KAPSO_WEBHOOK_VERIFY_TOKEN`.
 If you have a domain with HTTPS (behind nginx, Caddy, or Cloudflare), point your reverse proxy at the webhook server.
 
 ```
-Kapso webhook POST  ──→  https://yourdomain.com/webhook
-                               │  (reverse proxy → :18790)
+Kapso webhook POST  -->  https://yourdomain.com/webhook
+                               |  (reverse proxy -> :18790)
                           Webhook server (:18790)
-                               │
-                          OpenClaw Gateway  ──reply──→  Kapso API  ──→  WhatsApp
+                               |
+                          OpenClaw Gateway  --reply-->  Kapso API  -->  WhatsApp
 ```
 
 **Config diff from defaults:**
