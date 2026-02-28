@@ -5,34 +5,29 @@ An [OpenClaw](https://openclaw.dev) plugin that bridges [Kapso](https://kapso.ai
 ## How it works
 
 ```
-WhatsApp User
-    |  (sends message)
-Kapso Cloud API
-    |  (webhook POST)
-Your server (or Cloudflare Tunnel)
-    |
-kapso-whatsapp-webhook (:18790)
-    |  (WebSocket)
-OpenClaw Gateway (:18789)
+kapso-whatsapp-poller
+    |  (polls every 30s)
+Kapso REST API (GET /messages?direction=inbound)
+    |  (new messages found)
+OpenClaw Gateway (WebSocket :18789)
     |  (agent decides to reply)
 kapso-whatsapp-cli send --to +NUMBER --text "reply"
     |
-Kapso REST API --> WhatsApp User
+Kapso REST API (POST /messages) --> WhatsApp User
 ```
 
 The plugin ships two binaries:
 
-- **`kapso-whatsapp-webhook`** — HTTP server that receives Meta-format webhook events from Kapso, verifies HMAC-SHA256 signatures, and forwards incoming messages to the OpenClaw gateway over WebSocket.
+- **`kapso-whatsapp-poller`** — Polls the Kapso messages API for inbound messages and forwards them to the OpenClaw gateway over WebSocket. Tracks state to avoid duplicates.
 - **`kapso-whatsapp-cli`** — CLI tool added to the agent's PATH so it can send messages on demand.
 
-Both are statically compiled Go binaries with no runtime dependencies.
+Both are statically compiled Go binaries with no runtime dependencies. No tunnels, domains, or public endpoints needed.
 
 ## Prerequisites
 
 - [OpenClaw](https://openclaw.dev) gateway running
 - A [Kapso](https://kapso.ai) account with WhatsApp Cloud API access
-- Your Kapso API key, phone number ID, and webhook secret
-- A way to receive webhooks (public IP, reverse proxy, or Cloudflare Tunnel)
+- Your Kapso API key and phone number ID
 
 ## Installation
 
@@ -43,7 +38,7 @@ Add to your flake inputs:
 ```nix
 # flake.nix
 inputs.kapso-whatsapp = {
-  url = "github:hybridz/openclaw-kapso-whatsapp";
+  url = "github:Enriquefft/openclaw-kapso-whatsapp";
   inputs.nixpkgs.follows = "nixpkgs";
 };
 ```
@@ -54,7 +49,7 @@ The flake exports an `openclawPlugin` contract. If your nix-openclaw module supp
 # home-manager config
 programs.openclaw.customPlugins = [
   {
-    source = "github:hybridz/openclaw-kapso-whatsapp";
+    source = "github:Enriquefft/openclaw-kapso-whatsapp";
     config.env = {
       KAPSO_API_KEY = "/run/secrets/kapso-api-key";
       KAPSO_PHONE_NUMBER_ID = "/run/secrets/kapso-phone-number-id";
@@ -77,14 +72,14 @@ in {
   home.file.".openclaw/workspace/skills/whatsapp".source =
     "${inputs.kapso-whatsapp}/skills/whatsapp";
 
-  # Webhook server as a systemd user service
-  systemd.user.services.kapso-whatsapp-webhook = {
+  # Poller as a systemd user service
+  systemd.user.services.kapso-whatsapp-poller = {
     Unit = {
-      Description = "Kapso WhatsApp Webhook Server";
+      Description = "Kapso WhatsApp Poller";
       After = [ "openclaw-gateway.service" ];
     };
     Service = {
-      ExecStart = "${kapso.webhook}/bin/kapso-whatsapp-webhook";
+      ExecStart = "${kapso.poller}/bin/kapso-whatsapp-poller";
       Restart = "on-failure";
       EnvironmentFile = [ "/path/to/your/env-file" ];
     };
@@ -96,8 +91,8 @@ in {
 ### Without Nix
 
 ```bash
-go install github.com/hybridz/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@latest
-go install github.com/hybridz/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-webhook@latest
+go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@latest
+go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-poller@latest
 ```
 
 Copy `skills/whatsapp/SKILL.md` into your OpenClaw workspace skills directory.
@@ -106,14 +101,16 @@ Copy `skills/whatsapp/SKILL.md` into your OpenClaw workspace skills directory.
 
 All configuration is through environment variables.
 
-### Webhook server (`kapso-whatsapp-webhook`)
+### Poller (`kapso-whatsapp-poller`)
 
 | Variable | Required | Default | Description |
 |---|---|---|---|
-| `KAPSO_WEBHOOK_SECRET` | Yes | — | Webhook signing secret from Kapso dashboard |
+| `KAPSO_API_KEY` | Yes | — | Kapso API key |
+| `KAPSO_PHONE_NUMBER_ID` | Yes | — | Kapso WhatsApp phone number ID |
 | `OPENCLAW_GATEWAY_URL` | No | `ws://127.0.0.1:18789` | OpenClaw gateway WebSocket URL |
-| `OPENCLAW_TOKEN` | No | — | Gateway auth token (if gateway auth is enabled) |
-| `KAPSO_WEBHOOK_ADDR` | No | `:18790` | Address the webhook server listens on |
+| `OPENCLAW_TOKEN` | No | — | Gateway auth token (if auth is enabled) |
+| `KAPSO_POLL_INTERVAL` | No | `30` | Polling interval in seconds (minimum 5) |
+| `KAPSO_STATE_DIR` | No | `~/.config/kapso-whatsapp` | Directory for poll state file |
 
 ### CLI (`kapso-whatsapp-cli`)
 
@@ -121,7 +118,6 @@ All configuration is through environment variables.
 |---|---|---|---|
 | `KAPSO_API_KEY` | Yes | — | Kapso API key |
 | `KAPSO_PHONE_NUMBER_ID` | Yes | — | Kapso WhatsApp phone number ID |
-| `KAPSO_WEBHOOK_ADDR` | No | `http://localhost:18790` | Webhook server address (for `status` command) |
 
 ## Usage
 
@@ -131,67 +127,44 @@ All configuration is through environment variables.
 kapso-whatsapp-cli send --to +1234567890 --text "Hello from OpenClaw"
 ```
 
-### Checking webhook health
+### Running the poller
 
 ```bash
-kapso-whatsapp-cli status
-```
-
-### Running the webhook server
-
-```bash
-export KAPSO_WEBHOOK_SECRET="your-secret"
+export KAPSO_API_KEY="your-key"
+export KAPSO_PHONE_NUMBER_ID="your-phone-number-id"
 export OPENCLAW_TOKEN="your-gateway-token"
-kapso-whatsapp-webhook
+kapso-whatsapp-poller
 ```
 
-The server exposes:
-- `POST /webhook` — receives Kapso webhook events
-- `GET /webhook` — handles Meta webhook verification challenge
-- `GET /health` — returns `200 ok`
-
-## Receiving webhooks
-
-The webhook server needs to be reachable from the internet. A few options:
-
-**Cloudflare Tunnel (recommended for home servers):**
-
-```bash
-cloudflared tunnel login
-cloudflared tunnel create kapso-webhook
-cloudflared tunnel route dns kapso-webhook your-subdomain.example.com
-cloudflared tunnel run --url http://localhost:18790 kapso-webhook
-```
-
-**Reverse proxy:** Point your existing nginx/caddy at `localhost:18790`.
-
-**Direct:** If your server has a public IP, just expose port 18790.
-
-Then in the Kapso dashboard, set the webhook URL to `https://your-host/webhook` and subscribe to message events.
-
-## Webhook verification
-
-The server verifies incoming webhooks using the `X-Hub-Signature-256` header (HMAC-SHA256 with your webhook secret). It also handles Meta's `GET` verification challenge for webhook registration.
+The poller stores its last-seen timestamp in `~/.config/kapso-whatsapp/last-poll` to avoid replaying old messages across restarts.
 
 ## Project structure
 
 ```
 cmd/
   kapso-whatsapp-cli/       CLI for sending messages
-  kapso-whatsapp-webhook/   Webhook receiver server
+  kapso-whatsapp-poller/    Polls Kapso API for inbound messages
 internal/
-  kapso/                    Kapso API client and Meta-format types
-  webhook/                  HTTP server, signature verification, payload handling
+  kapso/                    Kapso API client, message types, list endpoint
   gateway/                  WebSocket client to OpenClaw gateway
 skills/
   whatsapp/                 SKILL.md — agent instructions
 ```
 
+## Why polling?
+
+- **No public endpoint** — outbound-only, nothing to expose
+- **No tunnel or domain** — works behind any NAT or firewall
+- **Near-zero resources** — one HTTP request every 30 seconds
+- **Simple** — no webhook verification, no signature checking, no TLS
+
+The trade-off is up to 30s latency on incoming messages, which is fine for personal use.
+
 ## Why Kapso instead of Baileys/direct WhatsApp?
 
-- **No persistent connections** — event-driven webhooks, near-zero idle CPU
+- **No persistent connections** — stateless API calls, near-zero idle CPU
 - **No phone emulation** — uses official Cloud API through Kapso, no ban risk
-- **No session management** — stateless HTTP, nothing to keep alive
+- **No session management** — nothing to keep alive
 - **Lower power footprint** — ideal for home servers and laptops
 
 ## License

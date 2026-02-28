@@ -13,24 +13,24 @@
 
         cli = pkgs.buildGoModule {
           pname = "kapso-whatsapp-cli";
-          version = "0.1.0";
+          version = "0.2.0";
           src = ./.;
           subPackages = [ "cmd/kapso-whatsapp-cli" ];
           vendorHash = "sha256-0Qxw+MUYVgzgWB8vi3HBYtVXSq/btfh4ZfV/m1chNrA=";
           env.CGO_ENABLED = "0";
         };
 
-        webhook = pkgs.buildGoModule {
-          pname = "kapso-whatsapp-webhook";
-          version = "0.1.0";
+        poller = pkgs.buildGoModule {
+          pname = "kapso-whatsapp-poller";
+          version = "0.2.0";
           src = ./.;
-          subPackages = [ "cmd/kapso-whatsapp-webhook" ];
+          subPackages = [ "cmd/kapso-whatsapp-poller" ];
           vendorHash = "sha256-0Qxw+MUYVgzgWB8vi3HBYtVXSq/btfh4ZfV/m1chNrA=";
           env.CGO_ENABLED = "0";
         };
       in {
         packages = {
-          inherit cli webhook;
+          inherit cli poller;
           default = cli;
         };
 

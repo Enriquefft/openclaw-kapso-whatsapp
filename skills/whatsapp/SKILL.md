@@ -21,7 +21,7 @@ kapso-whatsapp-cli send --to +NUMBER --text "Your message here"
 
 ## Incoming Messages
 
-Incoming WhatsApp messages arrive as JSON with this format:
+Incoming WhatsApp messages are polled automatically and arrive as JSON:
 
 ```json
 {"type": "message", "channel": "whatsapp", "from": "+NUMBER", "name": "Contact Name", "text": "message body"}
@@ -31,14 +31,6 @@ When you receive a WhatsApp message:
 1. Acknowledge it naturally
 2. Only reply if the user has instructed you to auto-reply, or if the context clearly calls for a response
 3. Use `kapso-whatsapp-cli send` to reply
-
-## Checking Status
-
-```bash
-kapso-whatsapp-cli status
-```
-
-Returns whether the webhook server is healthy.
 
 ## Important Rules
 
