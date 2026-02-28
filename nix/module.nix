@@ -101,7 +101,7 @@ in {
 
       sessionsJson = mkOption {
         type = types.str;
-        default = "~/.openclaw/agents/main/sessions/sessions.json";
+        default = "${config.home.homeDirectory}/.openclaw/agents/main/sessions/sessions.json";
         description = "Path to the OpenClaw sessions JSON file.";
       };
     };
@@ -109,7 +109,7 @@ in {
     state = {
       dir = mkOption {
         type = types.str;
-        default = "~/.config/kapso-whatsapp";
+        default = "${config.home.homeDirectory}/.config/kapso-whatsapp";
         description = "Directory for state files (last-poll timestamp, etc.).";
       };
     };
