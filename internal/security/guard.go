@@ -116,12 +116,13 @@ func (g *Guard) SessionKey(baseKey, from string) string {
 		return baseKey
 	}
 	n := normalize(from)
-	// Strip the leading + for the session key suffix.
-	suffix := strings.TrimPrefix(n, "+")
-	return baseKey + "-wa-" + suffix
+	return baseKey + "-wa-" + n
 }
 
-// normalize strips all characters except digits and a leading +.
+// normalize strips all non-digit characters (including a leading +) so that
+// "+51926689401" and "51926689401" both become "51926689401". This is required
+// because the Meta/WhatsApp webhook sends `from` without a leading +, while
+// config entries are commonly written with one.
 func normalize(phone string) string {
 	if phone == "" {
 		return ""
@@ -130,10 +131,8 @@ func normalize(phone string) string {
 	var b strings.Builder
 	b.Grow(len(phone))
 
-	for i, r := range phone {
-		if r == '+' && i == 0 {
-			b.WriteRune(r)
-		} else if r >= '0' && r <= '9' {
+	for _, r := range phone {
+		if r >= '0' && r <= '9' {
 			b.WriteRune(r)
 		}
 	}
