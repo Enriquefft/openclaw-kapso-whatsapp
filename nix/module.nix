@@ -2,7 +2,7 @@
 let
   cfg = config.services.kapso-whatsapp;
 
-  configToml = pkgs.writeText "kapso-whatsapp-config.toml" (lib.generators.toTOML {} {
+  configToml = pkgs.writeText "kapso-whatsapp-config.toml" (builtins.toTOML {
     delivery = {
       mode = cfg.delivery.mode;
       poll_interval = cfg.delivery.pollInterval;
