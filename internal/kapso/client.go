@@ -48,7 +48,7 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+c.APIKey)
+	httpReq.Header.Set("X-API-Key", c.APIKey)
 
 	resp, err := c.HTTPClient.Do(httpReq)
 	if err != nil {
@@ -61,7 +61,7 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 		return nil, fmt.Errorf("read response: %w", err)
 	}
 
-	if resp.StatusCode != http.StatusOK {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		return nil, fmt.Errorf("kapso API error (status %d): %s", resp.StatusCode, string(respBody))
 	}
 
