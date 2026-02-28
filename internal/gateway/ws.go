@@ -10,27 +10,32 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-// EventFrame is the OpenClaw gateway message envelope.
-type EventFrame struct {
-	Event   string          `json:"event"`
-	Payload json.RawMessage `json:"payload,omitempty"`
-	Seq     int             `json:"seq,omitempty"`
-	ID      string          `json:"id,omitempty"`
+// RequestFrame is an outgoing request to the OpenClaw gateway.
+type RequestFrame struct {
+	Type   string      `json:"type"`
+	ID     string      `json:"id"`
+	Method string      `json:"method"`
+	Params interface{} `json:"params,omitempty"`
 }
 
-// ChallengePayload is sent by the gateway on connect.
-type ChallengePayload struct {
-	Nonce string `json:"nonce"`
+// ResponseFrame is an incoming response/event from the gateway.
+type ResponseFrame struct {
+	Type   string          `json:"type"`
+	ID     string          `json:"id,omitempty"`
+	Method string          `json:"method,omitempty"`
+	Params json.RawMessage `json:"params,omitempty"`
+	Result json.RawMessage `json:"result,omitempty"`
+	Error  json.RawMessage `json:"error,omitempty"`
 }
 
-// ConnectPayload is sent by the client to authenticate.
-type ConnectPayload struct {
-	MinProtocol int          `json:"minProtocol"`
-	MaxProtocol int          `json:"maxProtocol"`
-	Client      ClientInfo   `json:"client"`
-	Auth        AuthInfo     `json:"auth"`
-	Role        string       `json:"role"`
-	Scopes      []string     `json:"scopes"`
+// ConnectParams is the params for the connect request.
+type ConnectParams struct {
+	MinProtocol string     `json:"minProtocol"`
+	MaxProtocol string     `json:"maxProtocol"`
+	Client      ClientInfo `json:"client"`
+	Auth        AuthInfo   `json:"auth"`
+	Role        string     `json:"role"`
+	Scopes      []string   `json:"scopes"`
 }
 
 // ClientInfo identifies this client to the gateway.
@@ -47,7 +52,7 @@ type AuthInfo struct {
 	Token string `json:"token"`
 }
 
-// GatewayMessage is the message format sent to the OpenClaw gateway.
+// GatewayMessage is the message payload sent to the OpenClaw gateway.
 type GatewayMessage struct {
 	Type    string `json:"type"`
 	Channel string `json:"channel"`
@@ -62,6 +67,7 @@ type Client struct {
 	token string
 	conn  *websocket.Conn
 	mu    sync.Mutex
+	seq   int
 }
 
 // NewClient creates a new gateway WebSocket client.
@@ -70,6 +76,11 @@ func NewClient(url, token string) *Client {
 		url:   url,
 		token: token,
 	}
+}
+
+func (c *Client) nextID() string {
+	c.seq++
+	return fmt.Sprintf("kapso-%d", c.seq)
 }
 
 // Connect establishes the WebSocket connection and completes the challenge-response auth.
@@ -96,84 +107,68 @@ func (c *Client) Connect() error {
 		return fmt.Errorf("read challenge: %w", err)
 	}
 
-	var frame EventFrame
-	if err := json.Unmarshal(msg, &frame); err != nil {
-		conn.Close()
-		c.conn = nil
-		return fmt.Errorf("parse challenge frame: %w", err)
-	}
+	log.Printf("received challenge from gateway: %s", string(msg))
 
-	if frame.Event != "connect.challenge" {
-		conn.Close()
-		c.conn = nil
-		return fmt.Errorf("expected connect.challenge, got %s", frame.Event)
-	}
-
-	log.Printf("received challenge from gateway")
-
-	// Send connect response with auth token.
-	connectPayload := ConnectPayload{
-		MinProtocol: 1,
-		MaxProtocol: 1,
-		Client: ClientInfo{
-			ID:          "kapso-whatsapp",
-			DisplayName: "Kapso WhatsApp Bridge",
-			Version:     "0.2.0",
-			Platform:    "linux",
-			Mode:        "backend",
+	// Send connect request.
+	connectReq := RequestFrame{
+		Type:   "req",
+		ID:     c.nextID(),
+		Method: "connect",
+		Params: ConnectParams{
+			MinProtocol: "1.0",
+			MaxProtocol: "1.0",
+			Client: ClientInfo{
+				ID:          "kapso-whatsapp",
+				DisplayName: "Kapso WhatsApp Bridge",
+				Version:     "0.2.0",
+				Platform:    "linux",
+				Mode:        "backend",
+			},
+			Auth: AuthInfo{
+				Token: c.token,
+			},
+			Role:   "operator",
+			Scopes: []string{"operator.admin"},
 		},
-		Auth: AuthInfo{
-			Token: c.token,
-		},
-		Role:   "operator",
-		Scopes: []string{"operator.admin"},
 	}
 
-	payloadBytes, err := json.Marshal(connectPayload)
+	data, err := json.Marshal(connectReq)
 	if err != nil {
 		conn.Close()
 		c.conn = nil
-		return fmt.Errorf("marshal connect payload: %w", err)
+		return fmt.Errorf("marshal connect request: %w", err)
 	}
 
-	connectFrame := EventFrame{
-		Event:   "connect",
-		Payload: payloadBytes,
-	}
+	log.Printf("sending connect request")
 
-	frameBytes, err := json.Marshal(connectFrame)
-	if err != nil {
-		conn.Close()
-		c.conn = nil
-		return fmt.Errorf("marshal connect frame: %w", err)
-	}
-
-	if err := conn.WriteMessage(websocket.TextMessage, frameBytes); err != nil {
+	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
 		conn.Close()
 		c.conn = nil
 		return fmt.Errorf("send connect: %w", err)
 	}
 
-	// Wait for hello.ok response.
+	// Wait for response.
 	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	_, msg, err = conn.ReadMessage()
 	if err != nil {
 		conn.Close()
 		c.conn = nil
-		return fmt.Errorf("read hello response: %w", err)
+		return fmt.Errorf("read connect response: %w", err)
 	}
 
-	var helloFrame EventFrame
-	if err := json.Unmarshal(msg, &helloFrame); err != nil {
+	log.Printf("connect response: %s", string(msg))
+
+	var resp ResponseFrame
+	if err := json.Unmarshal(msg, &resp); err != nil {
 		conn.Close()
 		c.conn = nil
-		return fmt.Errorf("parse hello frame: %w", err)
+		return fmt.Errorf("parse connect response: %w", err)
 	}
 
-	if helloFrame.Event != "hello.ok" {
+	if resp.Error != nil {
 		conn.Close()
 		c.conn = nil
-		return fmt.Errorf("auth failed: got %s (payload: %s)", helloFrame.Event, string(helloFrame.Payload))
+		return fmt.Errorf("connect rejected: %s", string(resp.Error))
 	}
 
 	// Clear deadline for normal operation.
@@ -183,7 +178,7 @@ func (c *Client) Connect() error {
 	return nil
 }
 
-// Send sends a message to the gateway using the EventFrame protocol.
+// Send sends a message to the gateway.
 func (c *Client) Send(msg GatewayMessage) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -192,19 +187,16 @@ func (c *Client) Send(msg GatewayMessage) error {
 		return fmt.Errorf("not connected to gateway")
 	}
 
-	payloadBytes, err := json.Marshal(msg)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
+	req := RequestFrame{
+		Type:   "req",
+		ID:     c.nextID(),
+		Method: "message.receive",
+		Params: msg,
 	}
 
-	frame := EventFrame{
-		Event:   "message.receive",
-		Payload: payloadBytes,
-	}
-
-	data, err := json.Marshal(frame)
+	data, err := json.Marshal(req)
 	if err != nil {
-		return fmt.Errorf("marshal frame: %w", err)
+		return fmt.Errorf("marshal request: %w", err)
 	}
 
 	if err := c.conn.WriteMessage(websocket.TextMessage, data); err != nil {
