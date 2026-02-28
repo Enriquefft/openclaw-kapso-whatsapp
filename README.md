@@ -7,6 +7,7 @@ Stateless. Two Go binaries. Near-zero idle CPU.
 [![CI](https://github.com/Enriquefft/openclaw-kapso-whatsapp/actions/workflows/ci.yml/badge.svg)](https://github.com/Enriquefft/openclaw-kapso-whatsapp/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/Enriquefft/openclaw-kapso-whatsapp)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Release](https://img.shields.io/github/v/release/Enriquefft/openclaw-kapso-whatsapp)](https://github.com/Enriquefft/openclaw-kapso-whatsapp/releases)
 
 ## Architecture
 
