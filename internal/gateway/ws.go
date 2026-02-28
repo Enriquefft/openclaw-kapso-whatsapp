@@ -52,13 +52,12 @@ type AuthInfo struct {
 	Token string `json:"token"`
 }
 
-// GatewayMessage is the message payload sent to the OpenClaw gateway.
-type GatewayMessage struct {
-	Type    string `json:"type"`
-	Channel string `json:"channel"`
-	From    string `json:"from"`
-	Name    string `json:"name,omitempty"`
-	Text    string `json:"text"`
+// ChatSendParams is the payload for chat.send requests to the OpenClaw gateway.
+// sessionKey "main" targets the agent's primary session.
+type ChatSendParams struct {
+	SessionKey     string `json:"sessionKey"`
+	Message        string `json:"message"`
+	IdempotencyKey string `json:"idempotencyKey"`
 }
 
 // Client manages a WebSocket connection to the OpenClaw gateway.
@@ -174,12 +173,38 @@ func (c *Client) Connect() error {
 	// Clear deadline for normal operation.
 	conn.SetReadDeadline(time.Time{})
 
+	// Drain unsolicited gateway events in the background so the socket
+	// buffer never fills up and write operations don't stall.
+	go c.drain()
+
 	log.Printf("authenticated with gateway at %s", c.url)
 	return nil
 }
 
-// Send sends a message to the gateway.
-func (c *Client) Send(msg GatewayMessage) error {
+// drain reads and discards all incoming frames from the gateway. It runs as a
+// background goroutine after Connect succeeds and exits when the connection is
+// closed.
+func (c *Client) drain() {
+	for {
+		c.mu.Lock()
+		conn := c.conn
+		c.mu.Unlock()
+		if conn == nil {
+			return
+		}
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			return
+		}
+		log.Printf("gateway event: %s", string(msg))
+	}
+}
+
+// Send submits a WhatsApp message to the OpenClaw gateway via chat.send.
+// The message is delivered to the agent's "main" session. The sender's phone
+// number and display name are embedded in the message text so the agent knows
+// who to reply to.
+func (c *Client) Send(sessionKey, idempotencyKey, message string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -190,8 +215,12 @@ func (c *Client) Send(msg GatewayMessage) error {
 	req := RequestFrame{
 		Type:   "req",
 		ID:     c.nextID(),
-		Method: "message.receive",
-		Params: msg,
+		Method: "chat.send",
+		Params: ChatSendParams{
+			SessionKey:     sessionKey,
+			Message:        message,
+			IdempotencyKey: idempotencyKey,
+		},
 	}
 
 	data, err := json.Marshal(req)

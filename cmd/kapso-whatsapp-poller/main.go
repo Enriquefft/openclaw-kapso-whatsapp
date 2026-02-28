@@ -6,6 +6,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -18,6 +19,7 @@ func main() {
 	phoneNumberID := os.Getenv("KAPSO_PHONE_NUMBER_ID")
 	gatewayURL := envOr("OPENCLAW_GATEWAY_URL", "ws://127.0.0.1:18789")
 	gatewayToken := os.Getenv("OPENCLAW_TOKEN")
+	sessionKey := envOr("OPENCLAW_SESSION_KEY", "main")
 	intervalStr := envOr("KAPSO_POLL_INTERVAL", "30")
 	stateDir := envOr("KAPSO_STATE_DIR", filepath.Join(os.Getenv("HOME"), ".config", "kapso-whatsapp"))
 
@@ -52,7 +54,7 @@ func main() {
 		log.Printf("first run, starting from %s", lastPoll.Format(time.RFC3339))
 	}
 
-	log.Printf("polling every %ds, gateway=%s", interval, gatewayURL)
+	log.Printf("polling every %ds, gateway=%s session=%s", interval, gatewayURL, sessionKey)
 
 	// Graceful shutdown.
 	stop := make(chan os.Signal, 1)
@@ -62,12 +64,12 @@ func main() {
 	defer ticker.Stop()
 
 	// Poll immediately on start, then on interval.
-	poll(client, gw, stateFile, &lastPoll)
+	poll(client, gw, sessionKey, stateFile, &lastPoll)
 
 	for {
 		select {
 		case <-ticker.C:
-			poll(client, gw, stateFile, &lastPoll)
+			poll(client, gw, sessionKey, stateFile, &lastPoll)
 		case sig := <-stop:
 			log.Printf("received %s, shutting down", sig)
 			return
@@ -75,7 +77,7 @@ func main() {
 	}
 }
 
-func poll(client *kapso.Client, gw *gateway.Client, stateFile string, lastPoll *time.Time) {
+func poll(client *kapso.Client, gw *gateway.Client, sessionKey, stateFile string, lastPoll *time.Time) {
 	since := lastPoll.Format(time.RFC3339)
 
 	resp, err := client.ListMessages(kapso.ListMessagesParams{
@@ -100,30 +102,27 @@ func poll(client *kapso.Client, gw *gateway.Client, stateFile string, lastPoll *
 			continue
 		}
 
+		msgTime := parseTimestamp(msg.Timestamp)
+
 		name := ""
 		if msg.Kapso != nil {
 			name = msg.Kapso.ContactName
 		}
 
-		gwMsg := gateway.GatewayMessage{
-			Type:    "message",
-			Channel: "whatsapp",
-			From:    msg.From,
-			Name:    name,
-			Text:    msg.Text.Body,
-		}
+		// Build the message text with sender context so the agent knows who
+		// to reply to via kapso-whatsapp-cli.
+		text := buildMessage(msg.From, name, msg.Text.Body)
 
-		if err := gw.Send(gwMsg); err != nil {
+		// Use the Kapso message ID as the idempotency key to prevent
+		// duplicate deliveries on retries.
+		if err := gw.Send(sessionKey, msg.ID, text); err != nil {
 			log.Printf("error forwarding message %s: %v", msg.ID, err)
 			continue
 		}
 		forwarded++
 
-		// Track newest message timestamp.
-		if t, err := time.Parse(time.RFC3339, msg.Timestamp); err == nil {
-			if t.After(newest) {
-				newest = t
-			}
+		if !msgTime.IsZero() && msgTime.After(newest) {
+			newest = msgTime
 		}
 	}
 
@@ -138,12 +137,40 @@ func poll(client *kapso.Client, gw *gateway.Client, stateFile string, lastPoll *
 	}
 }
 
+// buildMessage formats an inbound WhatsApp message for the agent, embedding
+// the sender's number and name so the agent can reply to the right contact.
+func buildMessage(from, name, body string) string {
+	var sb strings.Builder
+	sb.WriteString("[WhatsApp from ")
+	sb.WriteString(from)
+	if name != "" {
+		sb.WriteString(" (")
+		sb.WriteString(name)
+		sb.WriteString(")")
+	}
+	sb.WriteString("] ")
+	sb.WriteString(body)
+	return sb.String()
+}
+
+// parseTimestamp parses a message timestamp that may be either RFC3339
+// (e.g. "2026-01-01T00:00:00Z") or a Unix epoch second string (e.g. "1740704195").
+func parseTimestamp(s string) time.Time {
+	if t, err := time.Parse(time.RFC3339, s); err == nil {
+		return t
+	}
+	if n, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64); err == nil {
+		return time.Unix(n, 0).UTC()
+	}
+	return time.Time{}
+}
+
 func loadState(path string) time.Time {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return time.Time{}
 	}
-	t, err := time.Parse(time.RFC3339, string(data))
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(string(data)))
 	if err != nil {
 		return time.Time{}
 	}
