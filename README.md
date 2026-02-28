@@ -1,8 +1,41 @@
 # openclaw-kapso-whatsapp
 
-An [OpenClaw](https://openclaw.dev) plugin that bridges [Kapso](https://kapso.ai) WhatsApp Cloud API to your OpenClaw gateway. Your agent can send and receive WhatsApp messages without persistent connections, phone emulation, or ban risk.
+Give your [OpenClaw](https://openclaw.dev) AI agent a WhatsApp number.
+Official Meta Cloud API via [Kapso](https://kapso.ai) — a unified API for WhatsApp Cloud. No ban risk.
+Stateless. Two Go binaries. Near-zero idle CPU.
+
+[![CI](https://github.com/Enriquefft/openclaw-kapso-whatsapp/actions/workflows/ci.yml/badge.svg)](https://github.com/Enriquefft/openclaw-kapso-whatsapp/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/github/go-mod/go-version/Enriquefft/openclaw-kapso-whatsapp)](https://go.dev/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+
+## Architecture
+
+```
+WhatsApp  ──→  Kapso API  ──→  kapso-whatsapp-poller  ──→  OpenClaw Gateway  ──→  AI Agent
+   ↑                                     │
+   └─────────────────────────────────────┘
+                  relay: reads session JSONL, sends reply back
+```
+
+Three delivery modes: **polling** (zero-config), **Tailscale Funnel** (auto-tunnel), or **your own domain**.
+
+## No ban risk. No phone emulation.
+
+Libraries like Baileys and whatsapp-web.js reverse-engineer WhatsApp Web — Meta actively detects and bans these connections. This bridge uses the **official Cloud API** through Kapso, so your number stays safe.
+
+- **Stateless API calls** — no persistent connections, near-zero idle CPU
+- **No session management** — nothing to keep alive or reconnect
+- **Lower power footprint** — ideal for home servers and laptops
+- **Works with any OpenClaw agent** — just drop in SKILL.md
+
+## Demo
+
+<!-- TODO: Record with asciinema. Show: export vars → start poller → message arrives → relay responds → CLI send. Target 45-60s. -->
+_Coming soon — terminal recording of the full message flow._
 
 ## Quick start
+
+No config file. No database. No reverse proxy.
 
 ```bash
 export KAPSO_API_KEY="your-key"
@@ -10,13 +43,9 @@ export KAPSO_PHONE_NUMBER_ID="your-phone-number-id"
 kapso-whatsapp-poller
 ```
 
-That's it — polling mode works with zero configuration. For real-time webhooks or advanced settings, see [Configuration](#configuration).
+That's it — polling mode works with zero configuration. To cut latency to under 1 second, see [Tailscale Funnel mode](#tailscale-funnel-zero-config-tunnel).
 
 ## Installation
-
-### Prebuilt binaries
-
-Download the latest release for your platform from [GitHub Releases](https://github.com/Enriquefft/openclaw-kapso-whatsapp/releases).
 
 ### Go install
 
@@ -25,12 +54,20 @@ go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@
 go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-poller@latest
 ```
 
-Copy `skills/whatsapp/SKILL.md` into your OpenClaw workspace skills directory.
+Copy the agent skill definition into your OpenClaw workspace:
+
+```bash
+cp skills/whatsapp/SKILL.md ~/.openclaw/skills/whatsapp/SKILL.md
+```
+
+### Prebuilt binaries
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/Enriquefft/openclaw-kapso-whatsapp/releases).
 
 ### NixOS / Home Manager
 
 <details>
-<summary>Nix flake + home-manager setup</summary>
+<summary>Nix flake + home-manager setup (includes sops-nix support)</summary>
 
 ```nix
 # flake.nix
@@ -58,38 +95,12 @@ The module generates `~/.config/kapso-whatsapp/config.toml`, installs the CLI, a
 
 </details>
 
-## Development
-
-### Prerequisites
-
-- Go 1.22+
-- (Optional) [just](https://github.com/casey/just) command runner
-
-### Building and testing
-
-```bash
-just build          # Build both binaries
-just test           # Run tests
-just lint           # Run golangci-lint
-just check          # Run tests + vet + format check
-just install        # Install to $GOPATH/bin
-```
-
-Or without `just`:
-
-```bash
-go build ./...
-go test ./...
-go vet ./...
-```
-
-### Nix dev shell
-
-If you use Nix, `direnv allow` or `nix develop` gives you Go, gopls, golangci-lint, goreleaser, and just.
-
 ## Configuration
 
-### Config file
+The [Quick start](#quick-start) covers the minimum: just two env vars. Everything else has sensible defaults.
+
+<details>
+<summary>Full config reference</summary>
 
 Create `~/.config/kapso-whatsapp/config.toml` (or set `KAPSO_CONFIG` to a custom path):
 
@@ -133,6 +144,8 @@ These are the only values you typically need to set as env vars:
 | `OPENCLAW_TOKEN` | If gateway auth is enabled |
 
 All other settings have sensible defaults and belong in the config file if you need to change them.
+
+</details>
 
 ### Security
 
@@ -197,7 +210,7 @@ No extra config needed — just set the two required env vars.
 
 #### Tailscale Funnel (zero-config tunnel)
 
-Real-time delivery (< 1s latency) without owning a domain. The poller starts [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) automatically and prints the webhook URL to register in Kapso.
+Real-time delivery (< 1s latency) without owning a domain. The poller starts [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) automatically and prints the webhook URL to register in Kapso. Tailscale Funnel works on the free plan.
 
 ```
 Kapso webhook POST  ──→  https://<machine>.<tailnet>.ts.net/webhook
@@ -265,12 +278,38 @@ skills/
   whatsapp/                 SKILL.md — agent instructions
 ```
 
-## Why Kapso instead of Baileys/direct WhatsApp?
+## Development
 
-- **No persistent connections** — stateless API calls, near-zero idle CPU
-- **No phone emulation** — uses official Cloud API through Kapso, no ban risk
-- **No session management** — nothing to keep alive
-- **Lower power footprint** — ideal for home servers and laptops
+### Prerequisites
+
+- Go 1.22+
+- (Optional) [just](https://github.com/casey/just) command runner
+
+### Building and testing
+
+```bash
+just build          # Build both binaries
+just test           # Run tests
+just lint           # Run golangci-lint
+just check          # Run tests + vet + format check
+just install        # Install to $GOPATH/bin
+```
+
+Or without `just`:
+
+```bash
+go build ./...
+go test ./...
+go vet ./...
+```
+
+### Nix dev shell
+
+If you use Nix, `direnv allow` or `nix develop` gives you Go, gopls, golangci-lint, goreleaser, and just.
+
+## Contributing
+
+Issues and PRs welcome. Run `just check` before submitting. The Nix dev shell provides all tooling: `direnv allow` or `nix develop`.
 
 ## License
 
