@@ -29,11 +29,6 @@ Libraries like Baileys and whatsapp-web.js reverse-engineer WhatsApp Web — Met
 - **Lower power footprint** — ideal for home servers and laptops
 - **Works with any OpenClaw agent** — just drop in SKILL.md
 
-## Demo
-
-<!-- TODO: Record with asciinema. Show: export vars → start poller → message arrives → relay responds → CLI send. Target 45-60s. -->
-_Coming soon — terminal recording of the full message flow._
-
 ## Quick start
 
 No config file. No database. No reverse proxy.
