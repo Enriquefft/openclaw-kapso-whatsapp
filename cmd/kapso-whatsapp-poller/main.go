@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"log"
 	"os"
 	"os/signal"
@@ -22,6 +24,8 @@ func main() {
 	sessionKey := envOr("OPENCLAW_SESSION_KEY", "main")
 	intervalStr := envOr("KAPSO_POLL_INTERVAL", "30")
 	stateDir := envOr("KAPSO_STATE_DIR", filepath.Join(os.Getenv("HOME"), ".config", "kapso-whatsapp"))
+	sessionsJSON := envOr("OPENCLAW_SESSIONS_JSON",
+		filepath.Join(os.Getenv("HOME"), ".openclaw", "agents", "main", "sessions", "sessions.json"))
 
 	if apiKey == "" || phoneNumberID == "" {
 		log.Fatal("KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
@@ -64,12 +68,12 @@ func main() {
 	defer ticker.Stop()
 
 	// Poll immediately on start, then on interval.
-	poll(client, gw, sessionKey, stateFile, &lastPoll)
+	poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll)
 
 	for {
 		select {
 		case <-ticker.C:
-			poll(client, gw, sessionKey, stateFile, &lastPoll)
+			poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll)
 		case sig := <-stop:
 			log.Printf("received %s, shutting down", sig)
 			return
@@ -77,7 +81,7 @@ func main() {
 	}
 }
 
-func poll(client *kapso.Client, gw *gateway.Client, sessionKey, stateFile string, lastPoll *time.Time) {
+func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, stateFile string, lastPoll *time.Time) {
 	since := lastPoll.Format(time.RFC3339)
 
 	resp, err := client.ListMessages(kapso.ListMessagesParams{
@@ -109,9 +113,11 @@ func poll(client *kapso.Client, gw *gateway.Client, sessionKey, stateFile string
 			name = msg.Kapso.ContactName
 		}
 
-		// Build the message text with sender context so the agent knows who
-		// to reply to via kapso-whatsapp-cli.
 		text := buildMessage(msg.From, name, msg.Text.Body)
+
+		// Note the time just before sending so the relay goroutine can find
+		// the agent's reply (any assistant stop-message after this time).
+		sendAt := time.Now().UTC()
 
 		// Use the Kapso message ID as the idempotency key to prevent
 		// duplicate deliveries on retries.
@@ -120,6 +126,11 @@ func poll(client *kapso.Client, gw *gateway.Client, sessionKey, stateFile string
 			continue
 		}
 		forwarded++
+
+		// Automatically relay the agent's reply back to the WhatsApp sender.
+		// This mirrors what the TUI does: the agent just responds in text,
+		// and we deliver it — no exec call needed from the agent.
+		go waitAndRelay(sessionsJSON, sessionKey, msg.From, sendAt, client)
 
 		if !msgTime.IsZero() && msgTime.After(newest) {
 			newest = msgTime
@@ -137,8 +148,136 @@ func poll(client *kapso.Client, gw *gateway.Client, sessionKey, stateFile string
 	}
 }
 
+// waitAndRelay polls the session JSONL until the agent produces a reply, then
+// sends it back to the WhatsApp sender automatically.
+func waitAndRelay(sessionsJSON, sessionKey, from string, since time.Time, client *kapso.Client) {
+	to := from
+	if !strings.HasPrefix(to, "+") {
+		to = "+" + to
+	}
+
+	deadline := time.Now().Add(3 * time.Minute)
+	ticker := time.NewTicker(3 * time.Second)
+	defer ticker.Stop()
+
+	for {
+		if time.Now().After(deadline) {
+			log.Printf("relay: timeout waiting for agent reply to %s", to)
+			return
+		}
+
+		<-ticker.C
+
+		sessionFile, err := getSessionFile(sessionsJSON, sessionKey)
+		if err != nil {
+			log.Printf("relay: %v", err)
+			continue
+		}
+
+		text, err := getAssistantReply(sessionFile, since)
+		if err != nil {
+			log.Printf("relay: error reading session: %v", err)
+			continue
+		}
+		if text == "" {
+			continue
+		}
+
+		if _, err := client.SendText(to, text); err != nil {
+			log.Printf("relay: failed to send WhatsApp reply to %s: %v", to, err)
+		} else {
+			log.Printf("relay: sent reply to %s", to)
+		}
+		return
+	}
+}
+
+// getSessionFile reads sessions.json and returns the path to the active
+// session JSONL file for the given session key.
+func getSessionFile(sessionsJSON, sessionKey string) (string, error) {
+	data, err := os.ReadFile(sessionsJSON)
+	if err != nil {
+		return "", fmt.Errorf("read sessions.json: %w", err)
+	}
+
+	var sessions map[string]struct {
+		SessionFile string `json:"sessionFile"`
+	}
+	if err := json.Unmarshal(data, &sessions); err != nil {
+		return "", fmt.Errorf("parse sessions.json: %w", err)
+	}
+
+	// Try the canonical key first: "agent:KEY:KEY"
+	canonical := "agent:" + sessionKey + ":" + sessionKey
+	if s, ok := sessions[canonical]; ok && s.SessionFile != "" {
+		return s.SessionFile, nil
+	}
+
+	// Fall back: first entry whose key contains sessionKey.
+	for k, s := range sessions {
+		if strings.Contains(k, sessionKey) && s.SessionFile != "" {
+			return s.SessionFile, nil
+		}
+	}
+
+	return "", fmt.Errorf("no session file found for key %q in %s", sessionKey, sessionsJSON)
+}
+
+// getAssistantReply scans the session JSONL for the most recent assistant
+// message with stopReason=stop that was recorded after `since`.
+func getAssistantReply(sessionFile string, since time.Time) (string, error) {
+	data, err := os.ReadFile(sessionFile)
+	if err != nil {
+		return "", err
+	}
+
+	var lastText string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+
+		var entry struct {
+			Type      string    `json:"type"`
+			Timestamp time.Time `json:"timestamp"`
+			Message   struct {
+				Role       string `json:"role"`
+				StopReason string `json:"stopReason"`
+				Content    []struct {
+					Type string `json:"type"`
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+
+		if entry.Type != "message" || entry.Timestamp.Before(since) {
+			continue
+		}
+		if entry.Message.Role != "assistant" || entry.Message.StopReason != "stop" {
+			continue
+		}
+
+		var texts []string
+		for _, block := range entry.Message.Content {
+			if block.Type == "text" && block.Text != "" {
+				texts = append(texts, block.Text)
+			}
+		}
+		if len(texts) > 0 {
+			lastText = strings.Join(texts, "\n")
+		}
+	}
+
+	return lastText, nil
+}
+
 // buildMessage formats an inbound WhatsApp message for the agent, embedding
-// the sender's number and name so the agent can reply to the right contact.
+// the sender's number and name so the agent has context for who it's talking to.
 func buildMessage(from, name, body string) string {
 	var sb strings.Builder
 	sb.WriteString("[WhatsApp from ")
