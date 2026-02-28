@@ -48,16 +48,69 @@ type ContactProfile struct {
 
 // Message represents an incoming WhatsApp message.
 type Message struct {
-	From      string       `json:"from"`
-	ID        string       `json:"id"`
-	Timestamp string       `json:"timestamp"`
-	Type      string       `json:"type"`
-	Text      *TextContent `json:"text,omitempty"`
+	From      string           `json:"from"`
+	ID        string           `json:"id"`
+	Timestamp string           `json:"timestamp"`
+	Type      string           `json:"type"`
+	Text      *TextContent     `json:"text,omitempty"`
+	Image     *ImageContent    `json:"image,omitempty"`
+	Document  *DocumentContent `json:"document,omitempty"`
+	Audio     *AudioContent    `json:"audio,omitempty"`
+	Video     *VideoContent    `json:"video,omitempty"`
+	Sticker   *StickerContent  `json:"sticker,omitempty"`
+	Location  *LocationContent `json:"location,omitempty"`
 }
 
 // TextContent holds a text message body.
 type TextContent struct {
 	Body string `json:"body"`
+}
+
+// ImageContent holds image message data.
+type ImageContent struct {
+	ID       string `json:"id"`
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256,omitempty"`
+	Caption  string `json:"caption,omitempty"`
+}
+
+// DocumentContent holds document message data.
+type DocumentContent struct {
+	ID       string `json:"id"`
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256,omitempty"`
+	Filename string `json:"filename,omitempty"`
+	Caption  string `json:"caption,omitempty"`
+}
+
+// AudioContent holds audio message data.
+type AudioContent struct {
+	ID       string `json:"id"`
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256,omitempty"`
+}
+
+// VideoContent holds video message data.
+type VideoContent struct {
+	ID       string `json:"id"`
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256,omitempty"`
+	Caption  string `json:"caption,omitempty"`
+}
+
+// StickerContent holds sticker message data.
+type StickerContent struct {
+	ID       string `json:"id"`
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256,omitempty"`
+}
+
+// LocationContent holds location message data.
+type LocationContent struct {
+	Latitude  float64 `json:"latitude"`
+	Longitude float64 `json:"longitude"`
+	Name      string  `json:"name,omitempty"`
+	Address   string  `json:"address,omitempty"`
 }
 
 // Status represents a message delivery status update.
@@ -66,6 +119,15 @@ type Status struct {
 	Status    string `json:"status"`
 	Timestamp string `json:"timestamp"`
 	RecipientID string `json:"recipient_id"`
+}
+
+// MediaResponse is the response when retrieving media metadata from the API.
+type MediaResponse struct {
+	URL      string `json:"url"`
+	MimeType string `json:"mime_type"`
+	SHA256   string `json:"sha256"`
+	FileSize int64  `json:"file_size"`
+	ID       string `json:"id"`
 }
 
 // SendMessageRequest is the payload for sending a text message via Kapso.

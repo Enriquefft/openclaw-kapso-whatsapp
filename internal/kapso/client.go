@@ -72,3 +72,36 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 
 	return &result, nil
 }
+
+// GetMediaURL retrieves the download URL for a media attachment by its ID.
+func (c *Client) GetMediaURL(mediaID string) (*MediaResponse, error) {
+	url := fmt.Sprintf("%s/%s", baseURL, mediaID)
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("X-API-Key", c.APIKey)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get media URL: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("read response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("kapso API error (status %d): %s", resp.StatusCode, string(body))
+	}
+
+	var result MediaResponse
+	if err := json.Unmarshal(body, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return &result, nil
+}
