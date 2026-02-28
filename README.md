@@ -4,9 +4,9 @@ An [OpenClaw](https://openclaw.dev) plugin that bridges [Kapso](https://kapso.ai
 
 ## How it works
 
-The bridge supports two delivery modes: **polling** (default) and **webhooks** (for real-time delivery).
+The bridge supports three delivery modes: **polling** (default), **Tailscale Funnel** (auto-tunnel, no domain needed), and **your own domain** (reverse proxy).
 
-### Polling (default)
+### Option 1: Polling (default)
 
 ```
 kapso-whatsapp-poller
@@ -20,10 +20,26 @@ kapso-whatsapp-cli send --to +NUMBER --text "reply"
 Kapso REST API (POST /messages) --> WhatsApp User
 ```
 
-### Webhooks (real-time)
+### Option 2: Tailscale Funnel (auto-tunnel)
 
 ```
-Kapso webhook POST ──→ https://your-endpoint/webhook
+Kapso webhook POST ──→ https://<machine>.<tailnet>.ts.net/webhook
+                            |  (tailscale funnel auto-started)
+                       Webhook server (:18790)
+                            |  (instant delivery)
+                       OpenClaw Gateway (WebSocket :18789)
+                            |  (agent decides to reply)
+                       kapso-whatsapp-cli send --to +NUMBER --text "reply"
+                            |
+                       Kapso REST API (POST /messages) --> WhatsApp User
+```
+
+### Option 3: Your own domain
+
+```
+Kapso webhook POST ──→ https://yourdomain.com/webhook
+                            |  (reverse proxy → :18790)
+                       Webhook server (:18790)
                             |  (instant delivery)
                        OpenClaw Gateway (WebSocket :18789)
                             |  (agent decides to reply)
@@ -127,9 +143,10 @@ All configuration is through environment variables.
 | `OPENCLAW_TOKEN` | No | — | Gateway auth token (if auth is enabled) |
 | `KAPSO_POLL_INTERVAL` | No | `30` | Polling interval in seconds (minimum 5) |
 | `KAPSO_STATE_DIR` | No | `~/.config/kapso-whatsapp` | Directory for poll state file |
-| `KAPSO_WEBHOOK_MODE` | No | `off` | `off` = polling only, `webhook` = webhook only, `both` = webhook + polling fallback |
+| `KAPSO_MODE` | No | `polling` | `polling` = poll only, `tailscale` = auto-tunnel + webhook, `domain` = own domain + webhook |
+| `KAPSO_POLL_FALLBACK` | No | `false` | When using `tailscale` or `domain`, also run polling as a safety net |
 | `KAPSO_WEBHOOK_ADDR` | No | `:18790` | Webhook HTTP listen address |
-| `KAPSO_WEBHOOK_VERIFY_TOKEN` | When webhook enabled | — | Token for Meta webhook verification challenge |
+| `KAPSO_WEBHOOK_VERIFY_TOKEN` | When `tailscale`/`domain` | — | Token for Meta webhook verification challenge |
 | `KAPSO_WEBHOOK_SECRET` | No | — | HMAC-SHA256 secret for validating webhook signatures |
 
 ### CLI (`kapso-whatsapp-cli`)
@@ -163,18 +180,19 @@ The poller stores its last-seen timestamp in `~/.config/kapso-whatsapp/last-poll
 ```
 cmd/
   kapso-whatsapp-cli/       CLI for sending messages
-  kapso-whatsapp-poller/    Receives inbound messages (polling, webhook, or both)
+  kapso-whatsapp-poller/    Receives inbound messages (polling, tailscale, or domain)
 internal/
   kapso/                    Kapso API client, message types, list endpoint
   gateway/                  WebSocket client to OpenClaw gateway
   webhook/                  HTTP webhook server for real-time delivery
+  tailscale/                Tailscale Funnel automation (auto-start, URL discovery)
 skills/
   whatsapp/                 SKILL.md — agent instructions
 ```
 
 ## Delivery modes
 
-### Polling (default)
+### Option 1: Polling (default)
 
 Works out of the box — no public endpoint, no domain, no tunnel. One HTTP request every 30 seconds with up to 30s latency on incoming messages. Fine for personal use.
 
@@ -183,28 +201,41 @@ Works out of the box — no public endpoint, no domain, no tunnel. One HTTP requ
 kapso-whatsapp-poller
 ```
 
-### Webhooks
+### Option 2: Tailscale Funnel (zero-config tunnel)
 
-For real-time delivery (< 1s latency), enable the webhook server. The poller starts an HTTP endpoint that Kapso sends messages to directly.
+For real-time delivery (< 1s latency) without owning a domain. The poller automatically starts [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) and prints the webhook URL — just paste it into Kapso.
+
+**Prerequisites:**
+1. Install [Tailscale](https://tailscale.com/download) and run `tailscale up`
+2. Enable HTTPS certificates: `tailscale cert`
+
+**Start:**
 
 ```bash
-export KAPSO_WEBHOOK_MODE="webhook"          # or "both" for webhook + polling fallback
+export KAPSO_MODE="tailscale"
+export KAPSO_WEBHOOK_VERIFY_TOKEN="your-secret-token"
+kapso-whatsapp-poller
+# Prints: register this webhook URL in Kapso: https://<machine>.<tailnet>.ts.net/webhook
+```
+
+The poller auto-runs `tailscale funnel 18790` — no manual tunnel setup needed. On shutdown (Ctrl+C / SIGTERM) the funnel process is cleaned up automatically.
+
+**Why Tailscale Funnel?** No rate limits on incoming requests, open-source client, no browser interstitial, deterministic URLs, free for personal use.
+
+### Option 3: Your own domain
+
+If you already have a domain with HTTPS (e.g. behind nginx, Caddy, or Cloudflare), point your reverse proxy at the webhook server.
+
+```bash
+export KAPSO_MODE="domain"
 export KAPSO_WEBHOOK_VERIFY_TOKEN="your-secret-token"
 export KAPSO_WEBHOOK_SECRET="your-hmac-secret"  # optional but recommended
 kapso-whatsapp-poller
 ```
 
-The webhook server listens on `:18790` by default. You need to expose it to the internet so Kapso can reach it. Two options:
+Then configure your reverse proxy:
 
-#### Option A: Existing domain + reverse proxy
-
-If you already have a domain with HTTPS (e.g. behind nginx, Caddy, or Cloudflare):
-
-1. Point your reverse proxy at `localhost:18790`
-2. Register `https://yourdomain.com/webhook` as the webhook URL in Kapso
-3. Set the verify token in Kapso to match `KAPSO_WEBHOOK_VERIFY_TOKEN`
-
-**nginx example:**
+**nginx:**
 
 ```nginx
 location /webhook {
@@ -216,7 +247,7 @@ location /webhook {
 }
 ```
 
-**Caddy example:**
+**Caddy:**
 
 ```
 yourdomain.com {
@@ -224,30 +255,15 @@ yourdomain.com {
 }
 ```
 
-#### Option B: Tailscale Funnel (no domain needed)
+Register `https://yourdomain.com/webhook` as the webhook URL in Kapso with your verify token.
 
-[Tailscale Funnel](https://tailscale.com/kb/1223/funnel) exposes a local port to the internet via a stable HTTPS URL — no domain, no TLS config, free for personal use.
+### Polling fallback
 
-1. Install and configure [Tailscale](https://tailscale.com/download)
-2. Enable HTTPS and Funnel:
-
-   ```bash
-   tailscale up
-   tailscale cert                    # enable HTTPS certificates
-   tailscale funnel 18790            # expose webhook port
-   ```
-
-3. Your stable webhook URL will be `https://<machine>.<tailnet>.ts.net/webhook`
-4. Register that URL in Kapso with your verify token
-
-**Why Tailscale Funnel over ngrok?** No rate limits on incoming requests, open-source client, no browser interstitial, and deterministic URLs based on your machine name.
-
-### Both (webhook + polling fallback)
-
-Use `KAPSO_WEBHOOK_MODE=both` to receive messages via webhook with polling as a safety net. Messages are deduplicated by ID — if a webhook already delivered a message, the polling loop skips it.
+Any webhook mode (`tailscale` or `domain`) can optionally run polling as a safety net. Messages are deduplicated by ID — if a webhook already delivered a message, the polling loop skips it.
 
 ```bash
-export KAPSO_WEBHOOK_MODE="both"
+export KAPSO_MODE="tailscale"   # or "domain"
+export KAPSO_POLL_FALLBACK="true"
 export KAPSO_WEBHOOK_VERIFY_TOKEN="your-secret-token"
 kapso-whatsapp-poller
 ```

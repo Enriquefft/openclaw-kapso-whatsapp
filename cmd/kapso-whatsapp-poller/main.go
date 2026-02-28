@@ -15,6 +15,7 @@ import (
 
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/gateway"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/hybridz/openclaw-kapso-whatsapp/internal/tailscale"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/webhook"
 )
 
@@ -40,19 +41,23 @@ func main() {
 	sessionsJSON := envOr("OPENCLAW_SESSIONS_JSON",
 		filepath.Join(os.Getenv("HOME"), ".openclaw", "agents", "main", "sessions", "sessions.json"))
 
-	// Webhook configuration.
-	webhookMode := envOr("KAPSO_WEBHOOK_MODE", "off")       // "off", "webhook", "both"
-	webhookAddr := envOr("KAPSO_WEBHOOK_ADDR", ":18790")    // listen address
-	webhookVerifyToken := os.Getenv("KAPSO_WEBHOOK_VERIFY_TOKEN") // Meta verification token
-	webhookSecret := os.Getenv("KAPSO_WEBHOOK_SECRET")            // HMAC signature secret
+	// Delivery mode: "polling" (default), "tailscale", "domain".
+	// Backward compat: KAPSO_WEBHOOK_MODE "off"→"polling", "webhook"/"both" still work.
+	mode := resolveMode(envOr("KAPSO_MODE", ""), envOr("KAPSO_WEBHOOK_MODE", ""))
+	pollFallback := envOr("KAPSO_POLL_FALLBACK", "false") == "true"
+
+	// Webhook configuration (used by tailscale and domain modes).
+	webhookAddr := envOr("KAPSO_WEBHOOK_ADDR", ":18790")
+	webhookVerifyToken := os.Getenv("KAPSO_WEBHOOK_VERIFY_TOKEN")
+	webhookSecret := os.Getenv("KAPSO_WEBHOOK_SECRET")
 
 	if apiKey == "" || phoneNumberID == "" {
 		log.Fatal("KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
 	}
 
-	if webhookMode == "webhook" || webhookMode == "both" {
+	if mode == "tailscale" || mode == "domain" {
 		if webhookVerifyToken == "" {
-			log.Fatal("KAPSO_WEBHOOK_VERIFY_TOKEN must be set when webhook mode is enabled")
+			log.Fatal("KAPSO_WEBHOOK_VERIFY_TOKEN must be set when using tailscale or domain mode")
 		}
 	}
 
@@ -87,9 +92,11 @@ func main() {
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	// Start webhook server if enabled.
+	// Start webhook server if mode requires it.
 	var whSrv *webhook.Server
-	if webhookMode == "webhook" || webhookMode == "both" {
+	var funnelProc *os.Process
+
+	if mode == "tailscale" || mode == "domain" {
 		whSrv = webhook.NewServer(webhookAddr, webhookVerifyToken, webhookSecret,
 			func(id, from, name, body, timestamp string) {
 				text := buildMessage(from, name, body)
@@ -117,32 +124,58 @@ func main() {
 				whSrv.CleanSeen()
 			}
 		}()
+
+		// In tailscale mode, auto-start Tailscale Funnel.
+		if mode == "tailscale" {
+			port := strings.TrimPrefix(webhookAddr, ":")
+			webhookURL, proc, err := tailscale.StartFunnel(port)
+			if err != nil {
+				log.Fatalf("tailscale funnel: %v", err)
+			}
+			funnelProc = proc
+			log.Printf("register this webhook URL in Kapso: %s", webhookURL)
+		}
+
+		if mode == "domain" {
+			log.Printf("webhook server listening, point your reverse proxy at %s", webhookAddr)
+		}
 	}
 
-	// Polling loop (runs unless mode is "webhook" only).
-	if webhookMode == "off" || webhookMode == "both" {
+	// Determine if polling should run.
+	runPolling := mode == "polling" || pollFallback
+
+	if runPolling {
 		log.Printf("polling every %ds, gateway=%s session=%s", interval, gatewayURL, sessionKey)
+	}
 
-		ticker := time.NewTicker(time.Duration(interval) * time.Second)
-		defer ticker.Stop()
-
-		// Poll immediately on start, then on interval.
-		poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, whSrv)
-
-		for {
-			select {
-			case <-ticker.C:
-				poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, whSrv)
-			case sig := <-stop:
-				log.Printf("received %s, shutting down", sig)
-				return
-			}
+	if !runPolling {
+		if mode == "tailscale" {
+			log.Printf("tailscale mode, polling disabled, gateway=%s session=%s", gatewayURL, sessionKey)
+		} else {
+			log.Printf("domain mode, polling disabled, gateway=%s session=%s", gatewayURL, sessionKey)
 		}
-	} else {
-		log.Printf("webhook-only mode, polling disabled, gateway=%s session=%s", gatewayURL, sessionKey)
 		// Block until shutdown signal.
 		sig := <-stop
 		log.Printf("received %s, shutting down", sig)
+		cleanupFunnel(funnelProc)
+		return
+	}
+
+	ticker := time.NewTicker(time.Duration(interval) * time.Second)
+	defer ticker.Stop()
+
+	// Poll immediately on start, then on interval.
+	poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, whSrv)
+
+	for {
+		select {
+		case <-ticker.C:
+			poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, whSrv)
+		case sig := <-stop:
+			log.Printf("received %s, shutting down", sig)
+			cleanupFunnel(funnelProc)
+			return
+		}
 	}
 }
 
@@ -470,6 +503,33 @@ func loadState(path string) time.Time {
 
 func saveState(path string, t time.Time) {
 	os.WriteFile(path, []byte(t.Format(time.RFC3339)), 0o600)
+}
+
+// resolveMode normalises the delivery mode from KAPSO_MODE (preferred) or
+// the deprecated KAPSO_WEBHOOK_MODE. Returns "polling", "tailscale", or "domain".
+func resolveMode(mode, legacyMode string) string {
+	// Preferred: KAPSO_MODE.
+	switch strings.ToLower(mode) {
+	case "polling", "tailscale", "domain":
+		return strings.ToLower(mode)
+	}
+
+	// Backward compat: KAPSO_WEBHOOK_MODE.
+	switch strings.ToLower(legacyMode) {
+	case "webhook", "both":
+		log.Printf("KAPSO_WEBHOOK_MODE is deprecated — use KAPSO_MODE=domain or KAPSO_MODE=tailscale instead")
+		return "domain"
+	}
+
+	return "polling"
+}
+
+// cleanupFunnel kills the tailscale funnel process if it was started.
+func cleanupFunnel(proc *os.Process) {
+	if proc != nil {
+		log.Printf("stopping tailscale funnel (pid %d)", proc.Pid)
+		proc.Kill()
+	}
 }
 
 func envOr(key, fallback string) string {
