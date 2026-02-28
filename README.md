@@ -1,3 +1,7 @@
+<p align="center">
+  <img src=".github/icon.jpg" alt="openclaw-kapso-whatsapp" width="120">
+</p>
+
 # openclaw-kapso-whatsapp
 
 Give your [OpenClaw](https://openclaw.ai) AI agent a WhatsApp number.
