@@ -12,15 +12,15 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/config"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery/poller"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery/webhook"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/gateway"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/relay"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/security"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/tailscale"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/poller"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/webhook"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/gateway"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/relay"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/security"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/tailscale"
 )
 
 func main() {

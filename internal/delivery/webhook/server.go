@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
 )
 
 // Server is an HTTP webhook receiver that implements delivery.Source.

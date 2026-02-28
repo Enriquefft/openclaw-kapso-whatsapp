@@ -11,7 +11,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
 )
 
 const waMaxLen = 4096

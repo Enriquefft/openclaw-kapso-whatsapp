@@ -11,8 +11,8 @@ description: Send WhatsApp messages via Kapso (outbound to third parties on owne
 kapso-whatsapp-cli send --to +NUMBER --text "Your message here"
 ```
 
-- `--to` must include `+` and country code (e.g. `+51926689401`)
-- Add `+` if the number is missing it (e.g. `51926689401` → `+51926689401`)
+- `--to` must include `+` and country code (e.g. `+15551234567`)
+- Add `+` if the number is missing it (e.g. `51926689401` → `+15551234567`)
 
 Use this tool only when the owner **explicitly instructs** you to contact a third party.
 Confirm the number and message with the owner before sending unless they've been very explicit.

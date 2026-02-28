@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/config"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
 )
 
 func testCfg() config.SecurityConfig {
@@ -130,8 +130,8 @@ func TestNormalize(t *testing.T) {
 		{"+1 (234) 567-890", "1234567890"},
 		{"1234567890", "1234567890"},
 		{"+1234567890", "1234567890"},
-		{"51926689401", "51926689401"},
-		{"+51926689401", "51926689401"},
+		{"15551234567", "15551234567"},
+		{"+15551234567", "15551234567"},
 		{"", ""},
 	}
 	for _, tt := range tests {

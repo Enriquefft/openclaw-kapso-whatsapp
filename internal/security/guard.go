@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/config"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
 )
 
 // Verdict represents the outcome of a guard check.
@@ -120,7 +120,7 @@ func (g *Guard) SessionKey(baseKey, from string) string {
 }
 
 // normalize strips all non-digit characters (including a leading +) so that
-// "+51926689401" and "51926689401" both become "51926689401". This is required
+// "+15551234567" and "15551234567" both become "15551234567". This is required
 // because the Meta/WhatsApp webhook sends `from` without a leading +, while
 // config entries are commonly written with one.
 func normalize(phone string) string {

@@ -6,8 +6,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/config"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
 )
 
 func main() {

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery"
-	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
 )
 
 // Poller implements delivery.Source by polling the Kapso list-messages API.

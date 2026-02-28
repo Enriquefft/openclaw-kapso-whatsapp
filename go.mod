@@ -1,4 +1,4 @@
-module github.com/hybridz/openclaw-kapso-whatsapp
+module github.com/Enriquefft/openclaw-kapso-whatsapp
 
 go 1.22.0
 
