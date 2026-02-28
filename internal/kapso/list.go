@@ -24,13 +24,19 @@ type ListMessagesResponse struct {
 
 // InboundMessage represents a message from the list API.
 type InboundMessage struct {
-	ID        string       `json:"id"`
-	Timestamp string       `json:"timestamp"`
-	Type      string       `json:"type"`
-	From      string       `json:"from"`
-	To        string       `json:"to"`
-	Text      *TextContent `json:"text,omitempty"`
-	Kapso     *KapsoMeta   `json:"kapso,omitempty"`
+	ID        string           `json:"id"`
+	Timestamp string           `json:"timestamp"`
+	Type      string           `json:"type"`
+	From      string           `json:"from"`
+	To        string           `json:"to"`
+	Text      *TextContent     `json:"text,omitempty"`
+	Image     *ImageContent    `json:"image,omitempty"`
+	Document  *DocumentContent `json:"document,omitempty"`
+	Audio     *AudioContent    `json:"audio,omitempty"`
+	Video     *VideoContent    `json:"video,omitempty"`
+	Sticker   *StickerContent  `json:"sticker,omitempty"`
+	Location  *LocationContent `json:"location,omitempty"`
+	Kapso     *KapsoMeta       `json:"kapso,omitempty"`
 }
 
 // KapsoMeta contains Kapso-enhanced metadata.
