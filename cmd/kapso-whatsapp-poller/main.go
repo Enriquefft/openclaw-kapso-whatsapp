@@ -15,6 +15,7 @@ import (
 
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/gateway"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/hybridz/openclaw-kapso-whatsapp/internal/webhook"
 )
 
 const waMaxLen = 4096
@@ -39,8 +40,20 @@ func main() {
 	sessionsJSON := envOr("OPENCLAW_SESSIONS_JSON",
 		filepath.Join(os.Getenv("HOME"), ".openclaw", "agents", "main", "sessions", "sessions.json"))
 
+	// Webhook configuration.
+	webhookMode := envOr("KAPSO_WEBHOOK_MODE", "off")       // "off", "webhook", "both"
+	webhookAddr := envOr("KAPSO_WEBHOOK_ADDR", ":18790")    // listen address
+	webhookVerifyToken := os.Getenv("KAPSO_WEBHOOK_VERIFY_TOKEN") // Meta verification token
+	webhookSecret := os.Getenv("KAPSO_WEBHOOK_SECRET")            // HMAC signature secret
+
 	if apiKey == "" || phoneNumberID == "" {
 		log.Fatal("KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
+	}
+
+	if webhookMode == "webhook" || webhookMode == "both" {
+		if webhookVerifyToken == "" {
+			log.Fatal("KAPSO_WEBHOOK_VERIFY_TOKEN must be set when webhook mode is enabled")
+		}
 	}
 
 	interval, err := strconv.Atoi(intervalStr)
@@ -70,30 +83,70 @@ func main() {
 		log.Printf("first run, starting from %s", lastPoll.Format(time.RFC3339))
 	}
 
-	log.Printf("polling every %ds, gateway=%s session=%s", interval, gatewayURL, sessionKey)
-
 	// Graceful shutdown.
 	stop := make(chan os.Signal, 1)
 	signal.Notify(stop, syscall.SIGINT, syscall.SIGTERM)
 
-	ticker := time.NewTicker(time.Duration(interval) * time.Second)
-	defer ticker.Stop()
+	// Start webhook server if enabled.
+	var whSrv *webhook.Server
+	if webhookMode == "webhook" || webhookMode == "both" {
+		whSrv = webhook.NewServer(webhookAddr, webhookVerifyToken, webhookSecret,
+			func(id, from, name, body, timestamp string) {
+				text := buildMessage(from, name, body)
+				sendAt := time.Now().UTC()
 
-	// Poll immediately on start, then on interval.
-	poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll)
+				if err := gw.Send(sessionKey, id, text); err != nil {
+					log.Printf("webhook: error forwarding message %s: %v", id, err)
+					return
+				}
+				log.Printf("webhook: forwarded message %s from %s", id, from)
+				go waitAndRelay(sessionsJSON, sessionKey, from, sendAt, client)
+			})
 
-	for {
-		select {
-		case <-ticker.C:
-			poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll)
-		case sig := <-stop:
-			log.Printf("received %s, shutting down", sig)
-			return
+		go func() {
+			if err := whSrv.Start(); err != nil {
+				log.Printf("webhook server error: %v", err)
+			}
+		}()
+
+		// Periodically clean the dedup set (every 10 minutes).
+		go func() {
+			t := time.NewTicker(10 * time.Minute)
+			defer t.Stop()
+			for range t.C {
+				whSrv.CleanSeen()
+			}
+		}()
+	}
+
+	// Polling loop (runs unless mode is "webhook" only).
+	if webhookMode == "off" || webhookMode == "both" {
+		log.Printf("polling every %ds, gateway=%s session=%s", interval, gatewayURL, sessionKey)
+
+		ticker := time.NewTicker(time.Duration(interval) * time.Second)
+		defer ticker.Stop()
+
+		// Poll immediately on start, then on interval.
+		poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, whSrv)
+
+		for {
+			select {
+			case <-ticker.C:
+				poll(client, gw, sessionKey, sessionsJSON, stateFile, &lastPoll, whSrv)
+			case sig := <-stop:
+				log.Printf("received %s, shutting down", sig)
+				return
+			}
 		}
+	} else {
+		log.Printf("webhook-only mode, polling disabled, gateway=%s session=%s", gatewayURL, sessionKey)
+		// Block until shutdown signal.
+		sig := <-stop
+		log.Printf("received %s, shutting down", sig)
 	}
 }
 
-func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, stateFile string, lastPoll *time.Time) {
+func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, stateFile string, lastPoll *time.Time, whSrv *webhook.Server) {
 	since := lastPoll.Format(time.RFC3339)
 
 	resp, err := client.ListMessages(kapso.ListMessagesParams{
@@ -115,6 +168,11 @@ func poll(client *kapso.Client, gw *gateway.Client, sessionKey, sessionsJSON, st
 
 	for _, msg := range resp.Data {
 		if msg.Type != "text" || msg.Text == nil {
+			continue
+		}
+
+		// Skip messages already processed by webhook (when running in "both" mode).
+		if whSrv != nil && whSrv.MarkSeen(msg.ID) {
 			continue
 		}
 
