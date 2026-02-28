@@ -38,6 +38,16 @@
           default = cli;
         };
 
+        devShells.default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            go
+            gopls
+            golangci-lint
+            goreleaser
+            just
+          ];
+        };
+
         openclawPlugin = {
           name = "kapso-whatsapp";
           skills = [ ./skills/whatsapp ];

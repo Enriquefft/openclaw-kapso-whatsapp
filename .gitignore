@@ -1,3 +1,5 @@
 result
 /kapso-whatsapp-poller
 /kapso-whatsapp-cli
+.direnv/
+dist/

@@ -12,7 +12,7 @@ import (
 type Verdict int
 
 const (
-	Allow       Verdict = iota
+	Allow Verdict = iota
 	Deny
 	RateLimited
 )

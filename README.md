@@ -14,7 +14,23 @@ That's it — polling mode works with zero configuration. For real-time webhooks
 
 ## Installation
 
-### Nix (OpenClaw plugin)
+### Prebuilt binaries
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/Enriquefft/openclaw-kapso-whatsapp/releases).
+
+### Go install
+
+```bash
+go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@latest
+go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-poller@latest
+```
+
+Copy `skills/whatsapp/SKILL.md` into your OpenClaw workspace skills directory.
+
+### NixOS / Home Manager
+
+<details>
+<summary>Nix flake + home-manager setup</summary>
 
 ```nix
 # flake.nix
@@ -40,14 +56,36 @@ services.kapso-whatsapp = {
 
 The module generates `~/.config/kapso-whatsapp/config.toml`, installs the CLI, and creates a systemd user service. Secrets are read from files at startup — works with sops-nix, agenix, or plain files.
 
-### Without Nix
+</details>
+
+## Development
+
+### Prerequisites
+
+- Go 1.22+
+- (Optional) [just](https://github.com/casey/just) command runner
+
+### Building and testing
 
 ```bash
-go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@latest
-go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-poller@latest
+just build          # Build both binaries
+just test           # Run tests
+just lint           # Run golangci-lint
+just check          # Run tests + vet + format check
+just install        # Install to $GOPATH/bin
 ```
 
-Copy `skills/whatsapp/SKILL.md` into your OpenClaw workspace skills directory.
+Or without `just`:
+
+```bash
+go build ./...
+go test ./...
+go vet ./...
+```
+
+### Nix dev shell
+
+If you use Nix, `direnv allow` or `nix develop` gives you Go, gopls, golangci-lint, goreleaser, and just.
 
 ## Configuration
 
@@ -219,6 +257,7 @@ internal/
     poller/                 Polling source
     webhook/                HTTP webhook source
   relay/                    Relay agent replies back to WhatsApp
+  security/                 Allowlist, rate limiting, role tagging, session isolation
   tailscale/                Tailscale Funnel automation (auto-start, URL discovery)
 nix/
   module.nix                Home-manager module with typed options + sops-nix support

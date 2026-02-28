@@ -115,9 +115,9 @@ type LocationContent struct {
 
 // Status represents a message delivery status update.
 type Status struct {
-	ID        string `json:"id"`
-	Status    string `json:"status"`
-	Timestamp string `json:"timestamp"`
+	ID          string `json:"id"`
+	Status      string `json:"status"`
+	Timestamp   string `json:"timestamp"`
 	RecipientID string `json:"recipient_id"`
 }
 
