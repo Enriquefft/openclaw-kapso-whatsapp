@@ -2,7 +2,9 @@
 let
   cfg = config.services.kapso-whatsapp;
 
-  configToml = pkgs.writeText "kapso-whatsapp-config.toml" (builtins.toTOML {
+  tomlFormat = pkgs.formats.toml { };
+
+  configToml = tomlFormat.generate "kapso-whatsapp-config.toml" {
     delivery = {
       mode = cfg.delivery.mode;
       poll_interval = cfg.delivery.pollInterval;
@@ -19,7 +21,7 @@ let
     state = {
       dir = cfg.state.dir;
     };
-  });
+  };
 
   # Script that reads secret files and exports them as env vars before exec.
   loadSecrets = pkgs.writeShellScript "kapso-load-secrets" ''
