@@ -4,6 +4,10 @@ An [OpenClaw](https://openclaw.dev) plugin that bridges [Kapso](https://kapso.ai
 
 ## How it works
 
+The bridge supports two delivery modes: **polling** (default) and **webhooks** (for real-time delivery).
+
+### Polling (default)
+
 ```
 kapso-whatsapp-poller
     |  (polls every 30s)
@@ -16,12 +20,24 @@ kapso-whatsapp-cli send --to +NUMBER --text "reply"
 Kapso REST API (POST /messages) --> WhatsApp User
 ```
 
+### Webhooks (real-time)
+
+```
+Kapso webhook POST ──→ https://your-endpoint/webhook
+                            |  (instant delivery)
+                       OpenClaw Gateway (WebSocket :18789)
+                            |  (agent decides to reply)
+                       kapso-whatsapp-cli send --to +NUMBER --text "reply"
+                            |
+                       Kapso REST API (POST /messages) --> WhatsApp User
+```
+
 The plugin ships two binaries:
 
-- **`kapso-whatsapp-poller`** — Polls the Kapso messages API for inbound messages and forwards them to the OpenClaw gateway over WebSocket. Tracks state to avoid duplicates.
+- **`kapso-whatsapp-poller`** — Receives inbound messages via polling, webhooks, or both, and forwards them to the OpenClaw gateway over WebSocket. Tracks state to avoid duplicates.
 - **`kapso-whatsapp-cli`** — CLI tool added to the agent's PATH so it can send messages on demand.
 
-Both are statically compiled Go binaries with no runtime dependencies. No tunnels, domains, or public endpoints needed.
+Both are statically compiled Go binaries with no runtime dependencies.
 
 ## Prerequisites
 
@@ -111,6 +127,10 @@ All configuration is through environment variables.
 | `OPENCLAW_TOKEN` | No | — | Gateway auth token (if auth is enabled) |
 | `KAPSO_POLL_INTERVAL` | No | `30` | Polling interval in seconds (minimum 5) |
 | `KAPSO_STATE_DIR` | No | `~/.config/kapso-whatsapp` | Directory for poll state file |
+| `KAPSO_WEBHOOK_MODE` | No | `off` | `off` = polling only, `webhook` = webhook only, `both` = webhook + polling fallback |
+| `KAPSO_WEBHOOK_ADDR` | No | `:18790` | Webhook HTTP listen address |
+| `KAPSO_WEBHOOK_VERIFY_TOKEN` | When webhook enabled | — | Token for Meta webhook verification challenge |
+| `KAPSO_WEBHOOK_SECRET` | No | — | HMAC-SHA256 secret for validating webhook signatures |
 
 ### CLI (`kapso-whatsapp-cli`)
 
@@ -143,22 +163,94 @@ The poller stores its last-seen timestamp in `~/.config/kapso-whatsapp/last-poll
 ```
 cmd/
   kapso-whatsapp-cli/       CLI for sending messages
-  kapso-whatsapp-poller/    Polls Kapso API for inbound messages
+  kapso-whatsapp-poller/    Receives inbound messages (polling, webhook, or both)
 internal/
   kapso/                    Kapso API client, message types, list endpoint
   gateway/                  WebSocket client to OpenClaw gateway
+  webhook/                  HTTP webhook server for real-time delivery
 skills/
   whatsapp/                 SKILL.md — agent instructions
 ```
 
-## Why polling?
+## Delivery modes
 
-- **No public endpoint** — outbound-only, nothing to expose
-- **No tunnel or domain** — works behind any NAT or firewall
-- **Near-zero resources** — one HTTP request every 30 seconds
-- **Simple** — no webhook verification, no signature checking, no TLS
+### Polling (default)
 
-The trade-off is up to 30s latency on incoming messages, which is fine for personal use.
+Works out of the box — no public endpoint, no domain, no tunnel. One HTTP request every 30 seconds with up to 30s latency on incoming messages. Fine for personal use.
+
+```bash
+# Default: polling only, no extra config needed
+kapso-whatsapp-poller
+```
+
+### Webhooks
+
+For real-time delivery (< 1s latency), enable the webhook server. The poller starts an HTTP endpoint that Kapso sends messages to directly.
+
+```bash
+export KAPSO_WEBHOOK_MODE="webhook"          # or "both" for webhook + polling fallback
+export KAPSO_WEBHOOK_VERIFY_TOKEN="your-secret-token"
+export KAPSO_WEBHOOK_SECRET="your-hmac-secret"  # optional but recommended
+kapso-whatsapp-poller
+```
+
+The webhook server listens on `:18790` by default. You need to expose it to the internet so Kapso can reach it. Two options:
+
+#### Option A: Existing domain + reverse proxy
+
+If you already have a domain with HTTPS (e.g. behind nginx, Caddy, or Cloudflare):
+
+1. Point your reverse proxy at `localhost:18790`
+2. Register `https://yourdomain.com/webhook` as the webhook URL in Kapso
+3. Set the verify token in Kapso to match `KAPSO_WEBHOOK_VERIFY_TOKEN`
+
+**nginx example:**
+
+```nginx
+location /webhook {
+    proxy_pass http://127.0.0.1:18790;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+**Caddy example:**
+
+```
+yourdomain.com {
+    reverse_proxy /webhook localhost:18790
+}
+```
+
+#### Option B: Tailscale Funnel (no domain needed)
+
+[Tailscale Funnel](https://tailscale.com/kb/1223/funnel) exposes a local port to the internet via a stable HTTPS URL — no domain, no TLS config, free for personal use.
+
+1. Install and configure [Tailscale](https://tailscale.com/download)
+2. Enable HTTPS and Funnel:
+
+   ```bash
+   tailscale up
+   tailscale cert                    # enable HTTPS certificates
+   tailscale funnel 18790            # expose webhook port
+   ```
+
+3. Your stable webhook URL will be `https://<machine>.<tailnet>.ts.net/webhook`
+4. Register that URL in Kapso with your verify token
+
+**Why Tailscale Funnel over ngrok?** No rate limits on incoming requests, open-source client, no browser interstitial, and deterministic URLs based on your machine name.
+
+### Both (webhook + polling fallback)
+
+Use `KAPSO_WEBHOOK_MODE=both` to receive messages via webhook with polling as a safety net. Messages are deduplicated by ID — if a webhook already delivered a message, the polling loop skips it.
+
+```bash
+export KAPSO_WEBHOOK_MODE="both"
+export KAPSO_WEBHOOK_VERIFY_TOKEN="your-secret-token"
+kapso-whatsapp-poller
+```
 
 ## Why Kapso instead of Baileys/direct WhatsApp?
 
