@@ -1,0 +1,166 @@
+{ config, lib, pkgs, ... }:
+let
+  cfg = config.services.kapso-whatsapp;
+
+  configToml = pkgs.writeText "kapso-whatsapp-config.toml" (lib.generators.toTOML {} {
+    delivery = {
+      mode = cfg.delivery.mode;
+      poll_interval = cfg.delivery.pollInterval;
+      poll_fallback = cfg.delivery.pollFallback;
+    };
+    webhook = {
+      addr = cfg.webhook.addr;
+    };
+    gateway = {
+      url = cfg.gateway.url;
+      session_key = cfg.gateway.sessionKey;
+      sessions_json = cfg.gateway.sessionsJson;
+    };
+    state = {
+      dir = cfg.state.dir;
+    };
+  });
+
+  # Script that reads secret files and exports them as env vars before exec.
+  loadSecrets = pkgs.writeShellScript "kapso-load-secrets" ''
+    ${lib.optionalString (cfg.secrets.apiKeyFile != null) ''
+      export KAPSO_API_KEY="$(cat ${cfg.secrets.apiKeyFile})"
+    ''}
+    ${lib.optionalString (cfg.secrets.phoneNumberIdFile != null) ''
+      export KAPSO_PHONE_NUMBER_ID="$(cat ${cfg.secrets.phoneNumberIdFile})"
+    ''}
+    ${lib.optionalString (cfg.secrets.webhookVerifyTokenFile != null) ''
+      export KAPSO_WEBHOOK_VERIFY_TOKEN="$(cat ${cfg.secrets.webhookVerifyTokenFile})"
+    ''}
+    ${lib.optionalString (cfg.secrets.webhookSecretFile != null) ''
+      export KAPSO_WEBHOOK_SECRET="$(cat ${cfg.secrets.webhookSecretFile})"
+    ''}
+    ${lib.optionalString (cfg.secrets.gatewayTokenFile != null) ''
+      export OPENCLAW_TOKEN="$(cat ${cfg.secrets.gatewayTokenFile})"
+    ''}
+    exec "$@"
+  '';
+
+  inherit (lib) mkEnableOption mkOption types mkIf;
+in {
+  options.services.kapso-whatsapp = {
+    enable = mkEnableOption "Kapso WhatsApp bridge for OpenClaw";
+
+    package = mkOption {
+      type = types.package;
+      description = "The kapso-whatsapp-poller package.";
+    };
+
+    cliPackage = mkOption {
+      type = types.package;
+      description = "The kapso-whatsapp-cli package.";
+    };
+
+    delivery = {
+      mode = mkOption {
+        type = types.enum [ "polling" "tailscale" "domain" ];
+        default = "polling";
+        description = "Message delivery mode.";
+      };
+
+      pollInterval = mkOption {
+        type = types.int;
+        default = 30;
+        description = "Polling interval in seconds (minimum 5).";
+      };
+
+      pollFallback = mkOption {
+        type = types.bool;
+        default = false;
+        description = "Run polling alongside webhook as a safety net.";
+      };
+    };
+
+    webhook = {
+      addr = mkOption {
+        type = types.str;
+        default = ":18790";
+        description = "Webhook HTTP listen address.";
+      };
+    };
+
+    gateway = {
+      url = mkOption {
+        type = types.str;
+        default = "ws://127.0.0.1:18789";
+        description = "OpenClaw gateway WebSocket URL.";
+      };
+
+      sessionKey = mkOption {
+        type = types.str;
+        default = "main";
+        description = "OpenClaw session key.";
+      };
+
+      sessionsJson = mkOption {
+        type = types.str;
+        default = "~/.openclaw/agents/main/sessions/sessions.json";
+        description = "Path to the OpenClaw sessions JSON file.";
+      };
+    };
+
+    state = {
+      dir = mkOption {
+        type = types.str;
+        default = "~/.config/kapso-whatsapp";
+        description = "Directory for state files (last-poll timestamp, etc.).";
+      };
+    };
+
+    secrets = {
+      apiKeyFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Path to file containing the Kapso API key.";
+      };
+
+      phoneNumberIdFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Path to file containing the Kapso phone number ID.";
+      };
+
+      webhookVerifyTokenFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Path to file containing the webhook verify token.";
+      };
+
+      webhookSecretFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Path to file containing the webhook HMAC secret.";
+      };
+
+      gatewayTokenFile = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Path to file containing the OpenClaw gateway token.";
+      };
+    };
+  };
+
+  config = mkIf cfg.enable {
+    home.packages = [ cfg.cliPackage ];
+
+    home.file.".config/kapso-whatsapp/config.toml".source = configToml;
+
+    systemd.user.services.kapso-whatsapp-poller = {
+      Unit = {
+        Description = "Kapso WhatsApp Poller";
+        After = [ "openclaw-gateway.service" ];
+      };
+      Service = {
+        ExecStart = "${loadSecrets} ${cfg.package}/bin/kapso-whatsapp-poller";
+        Environment = [ "KAPSO_CONFIG=%h/.config/kapso-whatsapp/config.toml" ];
+        Restart = "on-failure";
+      };
+      Install.WantedBy = [ "default.target" ];
+    };
+  };
+}

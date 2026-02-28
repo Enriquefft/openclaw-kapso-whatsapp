@@ -6,6 +6,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/hybridz/openclaw-kapso-whatsapp/internal/config"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/kapso"
 )
 
@@ -59,15 +60,18 @@ func handleSend(args []string) {
 		os.Exit(1)
 	}
 
-	apiKey := os.Getenv("KAPSO_API_KEY")
-	phoneNumberID := os.Getenv("KAPSO_PHONE_NUMBER_ID")
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+		os.Exit(1)
+	}
 
-	if apiKey == "" || phoneNumberID == "" {
+	if cfg.Kapso.APIKey == "" || cfg.Kapso.PhoneNumberID == "" {
 		fmt.Fprintln(os.Stderr, "error: KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
 		os.Exit(1)
 	}
 
-	client := kapso.NewClient(apiKey, phoneNumberID)
+	client := kapso.NewClient(cfg.Kapso.APIKey, cfg.Kapso.PhoneNumberID)
 	resp, err := client.SendText(to, text)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -82,9 +86,15 @@ func handleSend(args []string) {
 }
 
 func handleStatus() {
-	webhookAddr := os.Getenv("KAPSO_WEBHOOK_ADDR")
-	if webhookAddr == "" {
-		webhookAddr = "http://localhost:18790"
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	webhookAddr := cfg.Webhook.Addr
+	if !strings.Contains(webhookAddr, "://") {
+		webhookAddr = "http://localhost" + webhookAddr
 	}
 
 	resp, err := http.Get(webhookAddr + "/health")
@@ -110,8 +120,7 @@ Commands:
   status                                Check webhook server health
   help                                  Show this help
 
-Environment:
-  KAPSO_API_KEY           Kapso API key (required for send)
-  KAPSO_PHONE_NUMBER_ID   Kapso phone number ID (required for send)
-  KAPSO_WEBHOOK_ADDR      Webhook server address (default: http://localhost:18790)`)
+Configuration:
+  Config file: ~/.config/kapso-whatsapp/config.toml (or set KAPSO_CONFIG)
+  Env vars KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID override config file values.`)
 }

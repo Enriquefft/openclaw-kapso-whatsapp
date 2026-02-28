@@ -7,11 +7,11 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"syscall"
 	"time"
 
+	"github.com/hybridz/openclaw-kapso-whatsapp/internal/config"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery/poller"
 	"github.com/hybridz/openclaw-kapso-whatsapp/internal/delivery/webhook"
@@ -22,48 +22,31 @@ import (
 )
 
 func main() {
-	apiKey := os.Getenv("KAPSO_API_KEY")
-	phoneNumberID := os.Getenv("KAPSO_PHONE_NUMBER_ID")
-	gatewayURL := envOr("OPENCLAW_GATEWAY_URL", "ws://127.0.0.1:18789")
-	gatewayToken := os.Getenv("OPENCLAW_TOKEN")
-	sessionKey := envOr("OPENCLAW_SESSION_KEY", "main")
-	intervalStr := envOr("KAPSO_POLL_INTERVAL", "30")
-	stateDir := envOr("KAPSO_STATE_DIR", filepath.Join(os.Getenv("HOME"), ".config", "kapso-whatsapp"))
-	sessionsJSON := envOr("OPENCLAW_SESSIONS_JSON",
-		filepath.Join(os.Getenv("HOME"), ".openclaw", "agents", "main", "sessions", "sessions.json"))
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("failed to load config: %v", err)
+	}
+	if err := cfg.Validate(); err != nil {
+		log.Fatalf("invalid config: %v", err)
+	}
 
-	// Delivery mode: "polling" (default), "tailscale", "domain".
-	mode := resolveMode(envOr("KAPSO_MODE", ""), envOr("KAPSO_WEBHOOK_MODE", ""))
-	pollFallback := envOr("KAPSO_POLL_FALLBACK", "false") == "true"
-
-	// Webhook configuration (used by tailscale and domain modes).
-	webhookAddr := envOr("KAPSO_WEBHOOK_ADDR", ":18790")
-	webhookVerifyToken := os.Getenv("KAPSO_WEBHOOK_VERIFY_TOKEN")
-	webhookSecret := os.Getenv("KAPSO_WEBHOOK_SECRET")
-
-	if apiKey == "" || phoneNumberID == "" {
+	if cfg.Kapso.APIKey == "" || cfg.Kapso.PhoneNumberID == "" {
 		log.Fatal("KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
 	}
 
-	if mode == "tailscale" || mode == "domain" {
-		if webhookVerifyToken == "" {
-			log.Fatal("KAPSO_WEBHOOK_VERIFY_TOKEN must be set when using tailscale or domain mode")
-		}
-	}
-
-	interval, err := strconv.Atoi(intervalStr)
-	if err != nil || interval < 5 {
-		interval = 30
+	mode := cfg.Delivery.Mode
+	if (mode == "tailscale" || mode == "domain") && cfg.Webhook.VerifyToken == "" {
+		log.Fatal("KAPSO_WEBHOOK_VERIFY_TOKEN must be set when using tailscale or domain mode")
 	}
 
 	// Connect to OpenClaw gateway.
-	gw := gateway.NewClient(gatewayURL, gatewayToken)
+	gw := gateway.NewClient(cfg.Gateway.URL, cfg.Gateway.Token)
 	if err := gw.Connect(); err != nil {
 		log.Fatalf("failed to connect to gateway: %v", err)
 	}
 	defer gw.Close()
 
-	client := kapso.NewClient(apiKey, phoneNumberID)
+	client := kapso.NewClient(cfg.Kapso.APIKey, cfg.Kapso.PhoneNumberID)
 
 	// Graceful shutdown.
 	ctx, cancel := context.WithCancel(context.Background())
@@ -76,30 +59,31 @@ func main() {
 	var sources []delivery.Source
 	var funnelProc *os.Process
 
-	runPolling := mode == "polling" || pollFallback
+	runPolling := mode == "polling" || cfg.Delivery.PollFallback
 
 	if runPolling {
 		sources = append(sources, &poller.Poller{
 			Client:    client,
-			Interval:  time.Duration(interval) * time.Second,
-			StateDir:  stateDir,
-			StateFile: filepath.Join(stateDir, "last-poll"),
+			Interval:  time.Duration(cfg.Delivery.PollInterval) * time.Second,
+			StateDir:  cfg.State.Dir,
+			StateFile: filepath.Join(cfg.State.Dir, "last-poll"),
 		})
-		log.Printf("polling every %ds, gateway=%s session=%s", interval, gatewayURL, sessionKey)
+		log.Printf("polling every %ds, gateway=%s session=%s",
+			cfg.Delivery.PollInterval, cfg.Gateway.URL, cfg.Gateway.SessionKey)
 	}
 
 	if mode == "tailscale" || mode == "domain" {
 		sources = append(sources, &webhook.Server{
-			Addr:        webhookAddr,
-			VerifyToken: webhookVerifyToken,
-			AppSecret:   webhookSecret,
+			Addr:        cfg.Webhook.Addr,
+			VerifyToken: cfg.Webhook.VerifyToken,
+			AppSecret:   cfg.Webhook.Secret,
 			Client:      client,
 		})
 
 		if mode == "tailscale" {
-			_, port, err := net.SplitHostPort(webhookAddr)
+			_, port, err := net.SplitHostPort(cfg.Webhook.Addr)
 			if err != nil {
-				port = strings.TrimPrefix(webhookAddr, ":")
+				port = strings.TrimPrefix(cfg.Webhook.Addr, ":")
 			}
 			webhookURL, proc, err := tailscale.StartFunnel(port)
 			if err != nil {
@@ -110,7 +94,7 @@ func main() {
 		}
 
 		if mode == "domain" {
-			log.Printf("webhook server listening, point your reverse proxy at %s", webhookAddr)
+			log.Printf("webhook server listening, point your reverse proxy at %s", cfg.Webhook.Addr)
 		}
 	}
 
@@ -127,8 +111,8 @@ func main() {
 
 	// Relay agent replies back to WhatsApp.
 	rel := &relay.Relay{
-		SessionsJSON: sessionsJSON,
-		SessionKey:   sessionKey,
+		SessionsJSON: cfg.Gateway.SessionsJSON,
+		SessionKey:   cfg.Gateway.SessionKey,
 		Client:       client,
 		Tracker:      relay.NewTracker(),
 	}
@@ -136,7 +120,7 @@ func main() {
 	// Consume loop — identical for all sources.
 	go func() {
 		for evt := range events {
-			if err := gw.Send(sessionKey, evt.ID, evt.Text); err != nil {
+			if err := gw.Send(cfg.Gateway.SessionKey, evt.ID, evt.Text); err != nil {
 				log.Printf("error forwarding message %s: %v", evt.ID, err)
 				continue
 			}
@@ -150,23 +134,6 @@ func main() {
 	log.Printf("received %s, shutting down", sig)
 	cancel()
 	cleanupFunnel(funnelProc)
-}
-
-// resolveMode normalises the delivery mode from KAPSO_MODE (preferred) or
-// the deprecated KAPSO_WEBHOOK_MODE.
-func resolveMode(mode, legacyMode string) string {
-	switch strings.ToLower(mode) {
-	case "polling", "tailscale", "domain":
-		return strings.ToLower(mode)
-	}
-
-	switch strings.ToLower(legacyMode) {
-	case "webhook", "both":
-		log.Printf("KAPSO_WEBHOOK_MODE is deprecated — use KAPSO_MODE=domain or KAPSO_MODE=tailscale instead")
-		return "domain"
-	}
-
-	return "polling"
 }
 
 // cleanupFunnel gracefully stops the tailscale funnel process if it was started.
@@ -189,11 +156,4 @@ func cleanupFunnel(proc *os.Process) {
 		log.Printf("tailscale funnel did not exit, sending SIGKILL")
 		proc.Kill()
 	}
-}
-
-func envOr(key, fallback string) string {
-	if v := os.Getenv(key); v != "" {
-		return v
-	}
-	return fallback
 }

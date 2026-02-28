@@ -7,25 +7,29 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, ... }:
+    {
+      homeManagerModules.default = import ./nix/module.nix;
+    }
+    //
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
 
         cli = pkgs.buildGoModule {
           pname = "kapso-whatsapp-cli";
-          version = "0.2.0";
+          version = "0.3.0";
           src = ./.;
           subPackages = [ "cmd/kapso-whatsapp-cli" ];
-          vendorHash = "sha256-0Qxw+MUYVgzgWB8vi3HBYtVXSq/btfh4ZfV/m1chNrA=";
+          vendorHash = "sha256-Upjt0Q2G6x5vGf0bG0TS9uWrHBow8/cQsZexhMgVb2I=";
           env.CGO_ENABLED = "0";
         };
 
         poller = pkgs.buildGoModule {
           pname = "kapso-whatsapp-poller";
-          version = "0.2.0";
+          version = "0.3.0";
           src = ./.;
           subPackages = [ "cmd/kapso-whatsapp-poller" ];
-          vendorHash = "sha256-0Qxw+MUYVgzgWB8vi3HBYtVXSq/btfh4ZfV/m1chNrA=";
+          vendorHash = "sha256-Upjt0Q2G6x5vGf0bG0TS9uWrHBow8/cQsZexhMgVb2I=";
           env.CGO_ENABLED = "0";
         };
       in {
