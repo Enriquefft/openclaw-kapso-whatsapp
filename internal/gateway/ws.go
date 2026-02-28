@@ -30,8 +30,8 @@ type ResponseFrame struct {
 
 // ConnectParams is the params for the connect request.
 type ConnectParams struct {
-	MinProtocol string     `json:"minProtocol"`
-	MaxProtocol string     `json:"maxProtocol"`
+	MinProtocol int        `json:"minProtocol"`
+	MaxProtocol int        `json:"maxProtocol"`
 	Client      ClientInfo `json:"client"`
 	Auth        AuthInfo   `json:"auth"`
 	Role        string     `json:"role"`
@@ -115,10 +115,10 @@ func (c *Client) Connect() error {
 		ID:     c.nextID(),
 		Method: "connect",
 		Params: ConnectParams{
-			MinProtocol: "1.0",
-			MaxProtocol: "1.0",
+			MinProtocol: 1,
+			MaxProtocol: 1,
 			Client: ClientInfo{
-				ID:          "kapso-whatsapp",
+				ID:          "gateway-client",
 				DisplayName: "Kapso WhatsApp Bridge",
 				Version:     "0.2.0",
 				Platform:    "linux",
