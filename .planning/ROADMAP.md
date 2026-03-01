@@ -49,7 +49,7 @@ Plans:
 
 Plans:
 - [x] 02-01-PLAN.md — OpenAI/Groq shared provider with MIME normalization, table-driven tests, and factory wiring
-- [ ] 02-02-PLAN.md — Deepgram provider, retry wrapper infrastructure, and factory retry wrapping
+- [x] 02-02-PLAN.md — Deepgram provider, retry wrapper infrastructure, and factory retry wrapping
 
 ### Phase 3: Integration
 **Goal**: Audio messages flow end-to-end from WhatsApp through transcription into the relay pipeline
@@ -61,11 +61,11 @@ Plans:
   3. Local whisper.cpp provider converts OGG to WAV via ffmpeg, runs whisper-cli, and cleans up temp files on completion and context cancellation
   4. `delivery.ExtractText` accepts a nil Transcriber and preserves current behavior unchanged for all non-audio messages
   5. `main.go` builds Transcriber from config at startup — nil if provider is unconfigured
-**Plans**: TBD
+**Plans:** 2 plans
 
 Plans:
-- [ ] 03-01: Local whisper.cpp provider with ffmpeg conversion and temp file cleanup
-- [ ] 03-02: ExtractText pipeline wiring and main.go startup integration
+- [ ] 03-01-PLAN.md — Local whisper.cpp provider with ffmpeg conversion, temp file cleanup, and factory wiring
+- [ ] 03-02-PLAN.md — ExtractText pipeline wiring, audio transcription branch, and main.go startup integration
 
 ### Phase 4: Reliability
 **Goal**: Transcription is hardened against transient failures, duplicate billing, and silent hallucinations
