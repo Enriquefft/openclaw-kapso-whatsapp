@@ -4,7 +4,7 @@ let
 
   tomlFormat = pkgs.formats.toml { };
 
-  configToml = tomlFormat.generate "kapso-whatsapp-config.toml" {
+  configToml = tomlFormat.generate "kapso-whatsapp-config.toml" ({
     delivery = {
       mode = cfg.delivery.mode;
       poll_interval = cfg.delivery.pollInterval;
@@ -44,7 +44,7 @@ let
       cache_ttl           = cfg.transcribe.cacheTTL;
       debug               = cfg.transcribe.debug;
     };
-  };
+  });
 
   # Script that reads secret files and exports them as env vars before exec.
   # Waits up to 60 s for each file to appear, so secret managers like sops-nix
