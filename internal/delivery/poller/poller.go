@@ -10,14 +10,17 @@ import (
 
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/transcribe"
 )
 
 // Poller implements delivery.Source by polling the Kapso list-messages API.
 type Poller struct {
-	Client    *kapso.Client
-	Interval  time.Duration
-	StateDir  string
-	StateFile string
+	Client       *kapso.Client
+	Interval     time.Duration
+	StateDir     string
+	StateFile    string
+	Transcriber  transcribe.Transcriber // nil = transcription disabled
+	MaxAudioSize int64
 }
 
 // Run polls the Kapso API on a ticker and emits events for each new inbound
@@ -69,7 +72,7 @@ func (p *Poller) poll(lastPoll *time.Time, out chan<- delivery.Event) {
 	forwarded := 0
 
 	for _, msg := range resp.Data {
-		text, ok := delivery.ExtractText(msg.Message, p.Client)
+		text, ok := delivery.ExtractText(msg.Message, p.Client, p.Transcriber, p.MaxAudioSize)
 		if !ok {
 			continue
 		}

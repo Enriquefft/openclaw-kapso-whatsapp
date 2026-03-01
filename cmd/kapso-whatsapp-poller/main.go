@@ -38,9 +38,6 @@ func main() {
 	if err != nil {
 		log.Fatalf("transcription config error: %v", err)
 	}
-	// transcriber is nil when no provider is configured — Phase 3 will pass it to delivery layer.
-	_ = transcriber
-
 	if cfg.Kapso.APIKey == "" || cfg.Kapso.PhoneNumberID == "" {
 		log.Fatal("KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
 	}
@@ -74,10 +71,12 @@ func main() {
 
 	if runPolling {
 		sources = append(sources, &poller.Poller{
-			Client:    client,
-			Interval:  time.Duration(cfg.Delivery.PollInterval) * time.Second,
-			StateDir:  cfg.State.Dir,
-			StateFile: filepath.Join(cfg.State.Dir, "last-poll"),
+			Client:       client,
+			Interval:     time.Duration(cfg.Delivery.PollInterval) * time.Second,
+			StateDir:     cfg.State.Dir,
+			StateFile:    filepath.Join(cfg.State.Dir, "last-poll"),
+			Transcriber:  transcriber,
+			MaxAudioSize: cfg.Transcribe.MaxAudioSize,
 		})
 		log.Printf("polling every %ds, gateway=%s session=%s",
 			cfg.Delivery.PollInterval, cfg.Gateway.URL, cfg.Gateway.SessionKey)
@@ -85,10 +84,12 @@ func main() {
 
 	if mode == "tailscale" || mode == "domain" {
 		sources = append(sources, &webhook.Server{
-			Addr:        cfg.Webhook.Addr,
-			VerifyToken: cfg.Webhook.VerifyToken,
-			AppSecret:   cfg.Webhook.Secret,
-			Client:      client,
+			Addr:         cfg.Webhook.Addr,
+			VerifyToken:  cfg.Webhook.VerifyToken,
+			AppSecret:    cfg.Webhook.Secret,
+			Client:       client,
+			Transcriber:  transcriber,
+			MaxAudioSize: cfg.Transcribe.MaxAudioSize,
 		})
 
 		if mode == "tailscale" {

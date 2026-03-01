@@ -16,16 +16,19 @@ import (
 
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/transcribe"
 )
 
 // Server is an HTTP webhook receiver that implements delivery.Source.
 // It receives Meta-format WhatsApp webhook events from Kapso and emits
 // delivery.Event for ALL message types (text, image, document, audio, video, location).
 type Server struct {
-	Addr        string
-	VerifyToken string
-	AppSecret   string
-	Client      *kapso.Client
+	Addr         string
+	VerifyToken  string
+	AppSecret    string
+	Client       *kapso.Client
+	Transcriber  transcribe.Transcriber // nil = transcription disabled
+	MaxAudioSize int64
 }
 
 // Run starts the webhook HTTP server and emits events on out. It blocks until
@@ -134,7 +137,7 @@ func (s *Server) handleEvent(w http.ResponseWriter, r *http.Request, out chan<- 
 			}
 
 			for _, msg := range change.Value.Messages {
-				text, ok := delivery.ExtractText(msg, s.Client)
+				text, ok := delivery.ExtractText(msg, s.Client, s.Transcriber, s.MaxAudioSize)
 				if !ok {
 					continue
 				}
