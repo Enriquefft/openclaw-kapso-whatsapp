@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: in_progress
-last_updated: "2026-03-01T16:29:11Z"
+status: complete
+last_updated: "2026-03-01T16:35:06.332Z"
 progress:
   total_phases: 4
-  completed_phases: 3
+  completed_phases: 4
   total_plans: 8
-  completed_plans: 7
+  completed_plans: 8
 ---
 
 # Project State
@@ -23,18 +23,18 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 4 of 4 (Reliability)
-Plan: 1 of 2 in current phase (04-01 complete)
-Status: In progress
-Last activity: 2026-03-01 — Plan 04-01 complete: no_speech_prob guard, debug logging, config fields (Debug/NoSpeechThreshold/CacheTTL), INFR-01 verified
+Plan: 2 of 2 in current phase (04-02 complete — PHASE COMPLETE)
+Status: Complete
+Last activity: 2026-03-01 — Plan 04-02 complete: SHA-256 cache decorator, factory wired as cache(retry(provider)), TRNS-05 and TEST-06 satisfied
 
-Progress: [████████░░] 77%
+Progress: [██████████] 100%
 
 ## Performance Metrics
 
 **Velocity:**
-- Total plans completed: 1
-- Average duration: 2min
-- Total execution time: ~0.03 hours
+- Total plans completed: 2
+- Average duration: 2.5min
+- Total execution time: ~0.04 hours
 
 **By Phase:**
 
@@ -42,10 +42,10 @@ Progress: [████████░░] 77%
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 4min | 2min |
 | 03-integration | 2 | 9min | 4.5min |
-| 04-reliability | 1 | 3min | 3min |
+| 04-reliability | 2 | 5min | 2.5min |
 
 **Recent Trend:**
-- Last 5 plans: 01-01 (2min), 04-01 (3min)
+- Last 5 plans: 01-01 (2min), 04-01 (3min), 04-02 (2min)
 - Trend: Consistent
 
 *Updated after each plan completion*
@@ -90,6 +90,9 @@ Recent decisions affecting current work:
 - [04-01]: providerName() derives from BaseURL string match — avoids adding a provider name field just for logging
 - [04-01]: Guard uses maxNoSpeech (worst segment) not average — one bad segment indicates noise in clip
 - [04-01]: gofmt applied to pre-existing unformatted test files as part of bulk fmt fix
+- [Phase 04-reliability]: cache(retry(provider)) for cloud — cache outermost short-circuits retry and network on hit
+- [Phase 04-reliability]: Mutex released before inner.Transcribe() — avoids holding lock during long network calls
+- [Phase 04-reliability]: Errors not cached — allows next call to retry inner provider fresh
 
 ### Pending Todos
 
@@ -105,5 +108,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 04-01-PLAN.md — no_speech_prob guard, debug logging, config fields, INFR-01 verified
+Stopped at: Completed 04-02-PLAN.md — SHA-256 cache decorator, factory wired as cache(retry(provider)), all tests pass, phase complete
 Resume file: None

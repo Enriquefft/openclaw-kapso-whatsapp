@@ -15,7 +15,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 - [x] **Phase 1: Foundation** - Config section, Transcriber interface, factory, and media download
 - [x] **Phase 2: Cloud Providers** - OpenAI/Groq shared implementation and Deepgram provider (completed 2026-03-01)
 - [x] **Phase 3: Integration** - Local whisper.cpp provider, pipeline wiring, and end-to-end flow (completed 2026-03-01)
-- [ ] **Phase 4: Reliability** - Retry, caching, no_speech_prob guard, debug logging, and full test coverage
+- [x] **Phase 4: Reliability** - Retry, caching, no_speech_prob guard, debug logging, and full test coverage (completed 2026-03-01)
 
 ## Phase Details
 
@@ -77,7 +77,7 @@ Plans:
   3. Cache TTL expiry causes a cache miss and a fresh provider call
   4. High `no_speech_prob` (above configured threshold, default 0.85) falls back to `[audio]` instead of emitting a hallucinated transcript
   5. Debug logging emits `avg_logprob`, `no_speech_prob`, and detected language from verbose_json responses at debug level
-**Plans:** 1/2 plans executed
+**Plans:** 2/2 plans complete
 
 Plans:
 - [ ] 04-01-PLAN.md — Config fields, verbose_json expansion, no_speech_prob guard, debug logging, and retry verification
@@ -93,4 +93,4 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | 1. Foundation | 2/2 | Complete | 2026-03-01 |
 | 2. Cloud Providers | 2/2 | Complete   | 2026-03-01 |
 | 3. Integration | 2/2 | Complete   | 2026-03-01 |
-| 4. Reliability | 1/2 | In Progress|  |
+| 4. Reliability | 2/2 | Complete   | 2026-03-01 |

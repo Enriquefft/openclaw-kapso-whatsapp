@@ -13,7 +13,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 - [x] **TRNS-02**: Transcribed audio enters pipeline as `[voice] ` + transcript, identical to typed text
 - [x] **TRNS-03**: Transcription failure falls back to `[audio] (mime)` with log warning (zero message loss)
 - [x] **TRNS-04**: `no_speech_prob` quality guard — high probability of silence/noise falls back to `[audio]` instead of sending hallucinated text (configurable threshold, default 0.85)
-- [ ] **TRNS-05**: Audio content-hash caching — SHA-256 hash of audio bytes, in-memory map with TTL, avoids duplicate API calls on webhook retries
+- [x] **TRNS-05**: Audio content-hash caching — SHA-256 hash of audio bytes, in-memory map with TTL, avoids duplicate API calls on webhook retries
 
 ### Providers — Cloud
 
@@ -64,7 +64,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 - [x] **TEST-03**: Extract integration test with mock transcriber (success + failure fallback)
 - [x] **TEST-04**: Media download test with size limit enforcement
 - [x] **TEST-05**: Retry logic test (429, 5xx, success after retry, exhausted retries)
-- [ ] **TEST-06**: Content-hash cache test (hit, miss, TTL expiry)
+- [x] **TEST-06**: Content-hash cache test (hit, miss, TTL expiry)
 
 ## v2 Requirements
 
@@ -124,10 +124,10 @@ Which phases cover which requirements. Updated during roadmap creation.
 | TEST-02 | Phase 3 | Complete |
 | TEST-03 | Phase 3 | Complete |
 | TRNS-04 | Phase 4 | Complete |
-| TRNS-05 | Phase 4 | Pending |
+| TRNS-05 | Phase 4 | Complete |
 | INFR-01 | Phase 4 | Complete |
 | INFR-04 | Phase 4 | Complete |
-| TEST-06 | Phase 4 | Pending |
+| TEST-06 | Phase 4 | Complete |
 
 **Coverage:**
 - v1 requirements: 35 total
