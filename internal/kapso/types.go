@@ -8,6 +8,25 @@ type WebhookPayload struct {
 	Entry  []Entry `json:"entry"`
 }
 
+// KapsoWebhookPayload is the top-level envelope for Kapso's native webhook format.
+// Detected by the presence of "type" and "data" fields (vs Meta's "object" and "entry").
+type KapsoWebhookPayload struct {
+	Type string              `json:"type"`
+	Data []KapsoWebhookEvent `json:"data"`
+}
+
+// KapsoWebhookEvent is a single event item inside the Kapso native "data" array.
+type KapsoWebhookEvent struct {
+	Message       Message            `json:"message"`
+	Conversation  *KapsoConversation `json:"conversation,omitempty"`
+	PhoneNumberID string             `json:"phone_number_id"`
+}
+
+// KapsoConversation holds conversation context from Kapso webhooks.
+type KapsoConversation struct {
+	ID string `json:"id"`
+}
+
 // Entry represents one business account entry.
 type Entry struct {
 	ID      string   `json:"id"`
