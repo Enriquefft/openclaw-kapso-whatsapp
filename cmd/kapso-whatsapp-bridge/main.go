@@ -97,7 +97,7 @@ func main() {
 			if err != nil {
 				port = strings.TrimPrefix(cfg.Webhook.Addr, ":")
 			}
-			webhookURL, proc, err := tailscale.StartFunnel(port)
+			webhookURL, proc, err := tailscale.StartFunnelWithRetry(ctx, port, tailscale.FunnelConfig{})
 			if err != nil {
 				log.Fatalf("tailscale funnel: %v", err)
 			}
