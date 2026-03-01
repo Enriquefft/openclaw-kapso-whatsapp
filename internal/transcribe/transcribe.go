@@ -87,7 +87,10 @@ func New(cfg config.TranscribeConfig) (Transcriber, error) {
 		if _, err := exec.LookPath(binaryPath); err != nil {
 			return nil, fmt.Errorf("local provider binary %q not found: %w", binaryPath, err)
 		}
-		return nil, fmt.Errorf("local provider not yet implemented (Phase 3)")
+		if _, err := exec.LookPath("ffmpeg"); err != nil {
+			return nil, fmt.Errorf("local provider requires ffmpeg in PATH: %w", err)
+		}
+		return newLocalWhisper(cfg)
 
 	default:
 		return nil, fmt.Errorf("unknown transcription provider %q (valid: openai, groq, deepgram, local)", provider)
