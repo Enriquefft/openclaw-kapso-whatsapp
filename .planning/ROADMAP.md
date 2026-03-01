@@ -48,7 +48,7 @@ Plans:
 **Plans:** 2 plans
 
 Plans:
-- [ ] 02-01-PLAN.md — OpenAI/Groq shared provider with MIME normalization, table-driven tests, and factory wiring
+- [x] 02-01-PLAN.md — OpenAI/Groq shared provider with MIME normalization, table-driven tests, and factory wiring
 - [ ] 02-02-PLAN.md — Deepgram provider, retry wrapper infrastructure, and factory retry wrapping
 
 ### Phase 3: Integration
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-03-01 |
-| 2. Cloud Providers | 0/2 | Not started | - |
+| 2. Cloud Providers | 1/2 | In progress | - |
 | 3. Integration | 0/2 | Not started | - |
 | 4. Reliability | 0/1 | Not started | - |

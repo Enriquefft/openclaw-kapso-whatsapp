@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T13:58:28.797Z"
+last_updated: "2026-03-01T15:13:00Z"
 progress:
-  total_phases: 1
+  total_phases: 4
   completed_phases: 1
-  total_plans: 2
-  completed_plans: 2
+  total_plans: 9
+  completed_plans: 3
 ---
 
 # Project State
@@ -18,16 +18,16 @@ progress:
 See: .planning/PROJECT.md (updated 2026-03-01)
 
 **Core value:** Audio messages from WhatsApp users reach OpenClaw as usable text — transparently, reliably, with graceful fallback if transcription fails.
-**Current focus:** Phase 1: Foundation
+**Current focus:** Phase 2: Cloud Providers
 
 ## Current Position
 
-Phase: 1 of 4 (Foundation)
-Plan: 2 of 2 in current phase (phase complete)
+Phase: 2 of 4 (Cloud Providers)
+Plan: 1 of 4 in current phase (02-01 complete)
 Status: In progress
-Last activity: 2026-03-01 — Plan 01-02 complete: Transcriber interface, DownloadMedia, main.go wiring
+Last activity: 2026-03-01 — Plan 02-01 complete: OpenAI/Groq Whisper provider, MIME normalization
 
-Progress: [██░░░░░░░░] 25%
+Progress: [███░░░░░░░] 33%
 
 ## Performance Metrics
 
@@ -66,6 +66,10 @@ Recent decisions affecting current work:
 - [01-02]: maxBytes passed as DownloadMedia parameter (not stored on Client) — keeps Client stateless re: transcription config
 - [01-02]: io.LimitReader(body, maxBytes+1) sentinel avoids reading full oversized response while detecting overflow
 - [01-02]: local provider validates binary via exec.LookPath at startup, not at transcription time
+- [02-01]: openAIWhisper uses CreatePart+textproto.MIMEHeader (not CreateFormFile) — CreateFormFile hardcodes application/octet-stream, rejecting audio files
+- [02-01]: w.Close() called explicitly before request construction — defer leaves buffer incomplete
+- [02-01]: audio/opus normalized to audio/ogg in NormalizeMIME — Kapso sends codecs param, Whisper needs base type
+- [02-01]: verbose_json response format chosen — richer metadata at no extra cost vs plain json
 
 ### Pending Todos
 
@@ -81,5 +85,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 01-02-PLAN.md — Transcriber interface, DownloadMedia, main.go wiring done (Phase 1 complete)
+Stopped at: Completed 02-01-PLAN.md — OpenAI/Groq Whisper provider with MIME normalization, factory wired
 Resume file: None

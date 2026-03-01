@@ -17,10 +17,10 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 
 ### Providers — Cloud
 
-- [ ] **PROV-01**: OpenAI Whisper provider — `POST /v1/audio/transcriptions`, multipart form (file, model, language), configurable model (default `whisper-1`)
-- [ ] **PROV-02**: Groq Whisper provider — same multipart shape as OpenAI with different base URL (`api.groq.com/openai/v1`), configurable model (default `whisper-large-v3`)
+- [x] **PROV-01**: OpenAI Whisper provider — `POST /v1/audio/transcriptions`, multipart form (file, model, language), configurable model (default `whisper-1`)
+- [x] **PROV-02**: Groq Whisper provider — same multipart shape as OpenAI with different base URL (`api.groq.com/openai/v1`), configurable model (default `whisper-large-v3`)
 - [ ] **PROV-03**: Deepgram Nova provider — `POST /v1/listen`, binary body with Content-Type set to audio MIME, query params (model, smart_format, language), configurable model (default `nova-3`)
-- [ ] **PROV-04**: OpenAI and Groq share implementation via configurable `BaseURL` field — no duplicated code
+- [x] **PROV-04**: OpenAI and Groq share implementation via configurable `BaseURL` field — no duplicated code
 
 ### Providers — Local
 
@@ -48,7 +48,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 
 - [ ] **INFR-01**: Retry with exponential backoff on 429/5xx — max 3 attempts, base 1s, factor 2x, jitter
 - [ ] **INFR-02**: `context.WithTimeout` per transcription call to prevent pipeline blocking
-- [ ] **INFR-03**: OGG/Opus MIME normalization — use `mime/multipart.CreatePart` (not `CreateFormFile`) for correct Content-Type
+- [x] **INFR-03**: OGG/Opus MIME normalization — use `mime/multipart.CreatePart` (not `CreateFormFile`) for correct Content-Type
 - [ ] **INFR-04**: Debug-level logging of `avg_logprob`, `no_speech_prob`, and detected language from verbose_json responses
 
 ### Wiring
@@ -59,7 +59,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 
 ### Tests
 
-- [ ] **TEST-01**: Table-driven tests for each cloud provider with HTTP test server mocking API responses
+- [x] **TEST-01**: Table-driven tests for each cloud provider with HTTP test server mocking API responses
 - [ ] **TEST-02**: Local whisper.cpp provider test with mock exec
 - [ ] **TEST-03**: Extract integration test with mock transcriber (success + failure fallback)
 - [x] **TEST-04**: Media download test with size limit enforcement
@@ -105,12 +105,12 @@ Which phases cover which requirements. Updated during roadmap creation.
 | MEDL-04 | Phase 1 | Complete |
 | WIRE-01 | Phase 1 | Complete |
 | TEST-04 | Phase 1 | Complete |
-| PROV-01 | Phase 2 | Pending |
-| PROV-02 | Phase 2 | Pending |
+| PROV-01 | Phase 2 | Complete (02-01) |
+| PROV-02 | Phase 2 | Complete (02-01) |
 | PROV-03 | Phase 2 | Pending |
-| PROV-04 | Phase 2 | Pending |
-| INFR-03 | Phase 2 | Pending |
-| TEST-01 | Phase 2 | Pending |
+| PROV-04 | Phase 2 | Complete (02-01) |
+| INFR-03 | Phase 2 | Complete (02-01) |
+| TEST-01 | Phase 2 | Complete (02-01) |
 | TEST-05 | Phase 2 | Pending |
 | TRNS-02 | Phase 3 | Pending |
 | TRNS-03 | Phase 3 | Pending |
@@ -136,4 +136,4 @@ Which phases cover which requirements. Updated during roadmap creation.
 
 ---
 *Requirements defined: 2026-03-01*
-*Last updated: 2026-03-01 after plan 01-01 completion (CONF-01 through CONF-05 complete)*
+*Last updated: 2026-03-01 after plan 02-01 completion (PROV-01, PROV-02, PROV-04, INFR-03, TEST-01 complete)*
