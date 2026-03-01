@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T15:13:00Z"
+last_updated: "2026-03-01T15:18:00Z"
 progress:
   total_phases: 4
   completed_phases: 1
   total_plans: 9
-  completed_plans: 3
+  completed_plans: 4
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 2 of 4 (Cloud Providers)
-Plan: 1 of 4 in current phase (02-01 complete)
+Plan: 2 of 4 in current phase (02-02 complete)
 Status: In progress
-Last activity: 2026-03-01 — Plan 02-01 complete: OpenAI/Groq Whisper provider, MIME normalization
+Last activity: 2026-03-01 — Plan 02-02 complete: Deepgram provider, retry wrapper, factory wired
 
-Progress: [███░░░░░░░] 33%
+Progress: [████░░░░░░] 44%
 
 ## Performance Metrics
 
@@ -70,6 +70,10 @@ Recent decisions affecting current work:
 - [02-01]: w.Close() called explicitly before request construction — defer leaves buffer incomplete
 - [02-01]: audio/opus normalized to audio/ogg in NormalizeMIME — Kapso sends codecs param, Whisper needs base type
 - [02-01]: verbose_json response format chosen — richer metadata at no extra cost vs plain json
+- [02-02]: deepgramProvider.BaseURL field overridable in tests — avoids global URL constant, keeps struct self-contained
+- [02-02]: retryTranscriber.sleepFunc injectable for zero-delay tests — same pattern as mockable now() from Phase 1
+- [02-02]: factory_internal_test.go as separate internal-package file — allows type assertion on unexported *retryTranscriber
+- [02-02]: isRetryable returns false for nil and non-httpError errors — non-HTTP errors (network failures) not automatically retried
 
 ### Pending Todos
 
@@ -78,12 +82,12 @@ None yet.
 ### Blockers/Concerns
 
 - [Phase 2]: Groq rate limits under load — exact audio-seconds-per-minute limit unknown; plan for 429 handling without confirmed threshold
-- [Phase 2]: Deepgram response nesting (`results.channels[0].alternatives[0].transcript`) confirmed but from partial docs page — add dedicated test with real response fixture
+- [Phase 2]: Deepgram response nesting (`results.channels[0].alternatives[0].transcript`) RESOLVED — dedicated test in deepgram_test.go validates with real fixture
 - [Phase 3]: Kapso `AudioContent` struct fields (`.ID`, `.MimeType`) inferred from codebase — verify against actual webhook payload before implementing audio branch
 - [Phase 3]: whisper.cpp `--output-txt` CLI flag stability is MEDIUM confidence — validate against installed binary version before implementing local provider
 
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 02-01-PLAN.md — OpenAI/Groq Whisper provider with MIME normalization, factory wired
+Stopped at: Completed 02-02-PLAN.md — Deepgram provider, retry wrapper with exponential backoff, all cloud providers wrapped
 Resume file: None

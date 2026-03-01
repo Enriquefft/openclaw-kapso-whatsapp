@@ -13,7 +13,7 @@ This milestone adds voice transcription to the existing WhatsApp-OpenClaw bridge
 Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Config section, Transcriber interface, factory, and media download
-- [ ] **Phase 2: Cloud Providers** - OpenAI/Groq shared implementation and Deepgram provider
+- [x] **Phase 2: Cloud Providers** - OpenAI/Groq shared implementation and Deepgram provider (completed 2026-03-01)
 - [ ] **Phase 3: Integration** - Local whisper.cpp provider, pipeline wiring, and end-to-end flow
 - [ ] **Phase 4: Reliability** - Retry, caching, no_speech_prob guard, debug logging, and full test coverage
 
@@ -45,7 +45,7 @@ Plans:
   3. MIME normalisation helper maps all OGG/Opus variants to `audio/ogg` before any provider call
   4. Table-driven tests for each provider pass against mock HTTP servers, including MIME boundary construction
   5. Retry logic test passes: 429/5xx triggers backoff, success after retry, exhausted retries returns error
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 02-01-PLAN.md — OpenAI/Groq shared provider with MIME normalization, table-driven tests, and factory wiring
@@ -90,6 +90,6 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-03-01 |
-| 2. Cloud Providers | 1/2 | In progress | - |
+| 2. Cloud Providers | 2/2 | Complete   | 2026-03-01 |
 | 3. Integration | 0/2 | Not started | - |
 | 4. Reliability | 0/1 | Not started | - |
