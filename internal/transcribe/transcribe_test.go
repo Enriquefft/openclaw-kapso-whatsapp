@@ -8,6 +8,7 @@ import (
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/transcribe"
 )
 
+
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name        string
@@ -30,10 +31,8 @@ func TestNew(t *testing.T) {
 			cfg:  config.TranscribeConfig{Provider: "groq", APIKey: "gsk-test"},
 		},
 		{
-			name:        "deepgram with api key returns not yet implemented",
-			cfg:         config.TranscribeConfig{Provider: "deepgram", APIKey: "dg-test"},
-			wantErr:     true,
-			errContains: "not yet implemented",
+			name: "deepgram with api key returns non-nil transcriber",
+			cfg:  config.TranscribeConfig{Provider: "deepgram", APIKey: "dg-test"},
 		},
 		{
 			name:        "openai without api key returns key error",

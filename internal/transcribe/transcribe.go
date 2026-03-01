@@ -6,6 +6,7 @@ import (
 	"log"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
 )
@@ -20,6 +21,9 @@ type Transcriber interface {
 // Returns (nil, nil) when no provider is configured — transcription disabled.
 // Returns an error when the provider is known but misconfigured or not yet implemented.
 // Returns an error for unknown providers.
+//
+// All cloud providers (openai, groq, deepgram) are wrapped in a retryTranscriber
+// that applies exponential backoff on 429/5xx errors.
 func New(cfg config.TranscribeConfig) (Transcriber, error) {
 	provider := strings.ToLower(strings.TrimSpace(cfg.Provider))
 
@@ -27,6 +31,8 @@ func New(cfg config.TranscribeConfig) (Transcriber, error) {
 		log.Printf("transcription disabled (no provider configured)")
 		return nil, nil
 	}
+
+	var p Transcriber
 
 	switch provider {
 	case "openai":
@@ -37,12 +43,12 @@ func New(cfg config.TranscribeConfig) (Transcriber, error) {
 		if model == "" {
 			model = "whisper-1"
 		}
-		return &openAIWhisper{
+		p = &openAIWhisper{
 			BaseURL:  "https://api.openai.com/v1",
 			APIKey:   cfg.APIKey,
 			Model:    model,
 			Language: cfg.Language,
-		}, nil
+		}
 
 	case "groq":
 		if cfg.APIKey == "" {
@@ -52,18 +58,26 @@ func New(cfg config.TranscribeConfig) (Transcriber, error) {
 		if model == "" {
 			model = "whisper-large-v3"
 		}
-		return &openAIWhisper{
+		p = &openAIWhisper{
 			BaseURL:  "https://api.groq.com/openai/v1",
 			APIKey:   cfg.APIKey,
 			Model:    model,
 			Language: cfg.Language,
-		}, nil
+		}
 
 	case "deepgram":
 		if cfg.APIKey == "" {
 			return nil, fmt.Errorf("provider %q requires KAPSO_TRANSCRIBE_API_KEY", provider)
 		}
-		return nil, fmt.Errorf("provider %q not yet implemented (Phase 2)", provider)
+		model := cfg.Model
+		if model == "" {
+			model = "nova-3"
+		}
+		p = &deepgramProvider{
+			APIKey:   cfg.APIKey,
+			Model:    model,
+			Language: cfg.Language,
+		}
 
 	case "local":
 		binaryPath := cfg.BinaryPath
@@ -78,4 +92,8 @@ func New(cfg config.TranscribeConfig) (Transcriber, error) {
 	default:
 		return nil, fmt.Errorf("unknown transcription provider %q (valid: openai, groq, deepgram, local)", provider)
 	}
+
+	// Wrap all cloud providers with retry logic.
+	timeout := time.Duration(cfg.Timeout) * time.Second
+	return newRetryTranscriber(p, timeout), nil
 }
