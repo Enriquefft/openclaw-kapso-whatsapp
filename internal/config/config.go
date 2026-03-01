@@ -12,12 +12,25 @@ import (
 
 // Config holds all configuration for the kapso-whatsapp bridge.
 type Config struct {
-	Kapso    KapsoConfig    `toml:"kapso"`
-	Delivery DeliveryConfig `toml:"delivery"`
-	Webhook  WebhookConfig  `toml:"webhook"`
-	Gateway  GatewayConfig  `toml:"gateway"`
-	State    StateConfig    `toml:"state"`
-	Security SecurityConfig `toml:"security"`
+	Kapso      KapsoConfig      `toml:"kapso"`
+	Delivery   DeliveryConfig   `toml:"delivery"`
+	Webhook    WebhookConfig    `toml:"webhook"`
+	Gateway    GatewayConfig    `toml:"gateway"`
+	State      StateConfig      `toml:"state"`
+	Security   SecurityConfig   `toml:"security"`
+	Transcribe TranscribeConfig `toml:"transcribe"`
+}
+
+// TranscribeConfig holds configuration for audio transcription providers.
+type TranscribeConfig struct {
+	Provider     string `toml:"provider"`
+	APIKey       string `toml:"api_key"`
+	Model        string `toml:"model"`
+	Language     string `toml:"language"`
+	MaxAudioSize int64  `toml:"max_audio_size"`
+	BinaryPath   string `toml:"binary_path"`
+	ModelPath    string `toml:"model_path"`
+	Timeout      int    `toml:"timeout"`
 }
 
 type KapsoConfig struct {
@@ -83,6 +96,11 @@ func defaults() Config {
 			RateWindow:       60,
 			SessionIsolation: true,
 			DefaultRole:      "member",
+		},
+		Transcribe: TranscribeConfig{
+			MaxAudioSize: 25 * 1024 * 1024, // 25MB
+			BinaryPath:   "whisper-cli",
+			Timeout:      30,
 		},
 	}
 }
@@ -208,6 +226,31 @@ func applyEnv(cfg *Config) {
 			}
 		}
 	}
+
+	// Transcribe overrides.
+	if v := os.Getenv("KAPSO_TRANSCRIBE_PROVIDER"); v != "" {
+		cfg.Transcribe.Provider = strings.ToLower(v)
+	}
+	if v := os.Getenv("KAPSO_TRANSCRIBE_API_KEY"); v != "" {
+		cfg.Transcribe.APIKey = v
+	}
+	if v := os.Getenv("KAPSO_TRANSCRIBE_MODEL"); v != "" {
+		cfg.Transcribe.Model = v
+	}
+	if v := os.Getenv("KAPSO_TRANSCRIBE_LANGUAGE"); v != "" {
+		cfg.Transcribe.Language = v
+	}
+	if v := os.Getenv("KAPSO_TRANSCRIBE_MAX_AUDIO_SIZE"); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
+			cfg.Transcribe.MaxAudioSize = n
+		}
+	}
+	if v := os.Getenv("KAPSO_TRANSCRIBE_BINARY_PATH"); v != "" {
+		cfg.Transcribe.BinaryPath = v
+	}
+	if v := os.Getenv("KAPSO_TRANSCRIBE_MODEL_PATH"); v != "" {
+		cfg.Transcribe.ModelPath = v
+	}
 }
 
 // resolveMode normalises the delivery mode from KAPSO_MODE (preferred) or
@@ -274,6 +317,11 @@ func (c *Config) Validate() error {
 				seen[phone] = role
 			}
 		}
+	}
+
+	// Transcribe validation: reset MaxAudioSize if zero or negative (guards TOML zero-value masking).
+	if c.Transcribe.MaxAudioSize <= 0 {
+		c.Transcribe.MaxAudioSize = 25 * 1024 * 1024
 	}
 
 	return nil
