@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: unknown
-last_updated: "2026-03-01T15:22:30.134Z"
+last_updated: "2026-03-01T16:04:00Z"
 progress:
   total_phases: 2
   completed_phases: 2
-  total_plans: 4
-  completed_plans: 4
+  total_plans: 6
+  completed_plans: 6
 ---
 
 # Project State
@@ -23,11 +23,11 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 3 of 4 (Integration)
-Plan: 1 of 2 in current phase (03-01 complete)
+Plan: 2 of 2 in current phase (03-02 complete)
 Status: In progress
-Last activity: 2026-03-01 — Plan 03-01 complete: Local whisper.cpp provider with ffmpeg subprocess and injectable execCmd
+Last activity: 2026-03-01 — Plan 03-02 complete: ExtractText widened, audio transcription branch, Transcriber wired through Poller/Server/main.go
 
-Progress: [█████░░░░░] 55%
+Progress: [██████░░░░] 66%
 
 ## Performance Metrics
 
@@ -41,7 +41,7 @@ Progress: [█████░░░░░] 55%
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
 | 01-foundation | 2 | 4min | 2min |
-| 03-integration | 1 | 3min | 3min |
+| 03-integration | 2 | 9min | 4.5min |
 
 **Recent Trend:**
 - Last 5 plans: 01-01 (2min)
@@ -80,6 +80,10 @@ Recent decisions affecting current work:
 - [03-01]: execCmd function field injectable (same pattern as now()) — lets tests intercept both ffmpeg and whisper-cli without real binaries
 - [03-01]: ffmpeg validated in factory LookPath, not in newLocalWhisper — struct constructor focuses on config validation
 - [03-01]: whisper-cli -otxt flag writes to outputPrefix.txt — reading stdout would risk buffering issues
+- [03-02]: context.Background() passed to Transcribe — provider-level timeout (30s) is sufficient; no separate pipeline timeout needed
+- [03-02]: WARN log on each failure step (GetMediaURL, DownloadMedia, Transcribe) — silent fallback, message never lost
+- [03-02]: transcribe.Transcriber interface type in test struct (not *mockTranscriber) — avoids Go interface nil pitfall where (*T)(nil) != nil interface
+- [03-02]: Fallback calls formatMediaMessage which does its own best-effort GetMediaURL — double call accepted for simplicity in non-critical fallback path
 
 ### Pending Todos
 
@@ -95,5 +99,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 03-01-PLAN.md — local whisper.cpp provider with ffmpeg subprocess, injectable execCmd, factory wired
+Stopped at: Completed 03-02-PLAN.md — ExtractText widened with Transcriber, audio transcription branch [voice]/[audio], wired through Poller/Server/main.go
 Resume file: None

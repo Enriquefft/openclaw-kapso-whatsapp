@@ -14,7 +14,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 - [x] **Phase 1: Foundation** - Config section, Transcriber interface, factory, and media download
 - [x] **Phase 2: Cloud Providers** - OpenAI/Groq shared implementation and Deepgram provider (completed 2026-03-01)
-- [ ] **Phase 3: Integration** - Local whisper.cpp provider, pipeline wiring, and end-to-end flow
+- [x] **Phase 3: Integration** - Local whisper.cpp provider, pipeline wiring, and end-to-end flow (completed 2026-03-01)
 - [ ] **Phase 4: Reliability** - Retry, caching, no_speech_prob guard, debug logging, and full test coverage
 
 ## Phase Details
@@ -61,7 +61,7 @@ Plans:
   3. Local whisper.cpp provider converts OGG to WAV via ffmpeg, runs whisper-cli, and cleans up temp files on completion and context cancellation
   4. `delivery.ExtractText` accepts a nil Transcriber and preserves current behavior unchanged for all non-audio messages
   5. `main.go` builds Transcriber from config at startup — nil if provider is unconfigured
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
 - [x] 03-01-PLAN.md — Local whisper.cpp provider with ffmpeg conversion, temp file cleanup, and factory wiring
@@ -91,5 +91,5 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 |-------|----------------|--------|-----------|
 | 1. Foundation | 2/2 | Complete | 2026-03-01 |
 | 2. Cloud Providers | 2/2 | Complete   | 2026-03-01 |
-| 3. Integration | 1/2 | In progress | - |
+| 3. Integration | 2/2 | Complete   | 2026-03-01 |
 | 4. Reliability | 0/1 | Not started | - |

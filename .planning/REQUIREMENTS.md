@@ -10,8 +10,8 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 ### Transcription Core
 
 - [x] **TRNS-01**: Transcriber interface with single method: `Transcribe(ctx context.Context, audio []byte, mimeType string) (string, error)`
-- [ ] **TRNS-02**: Transcribed audio enters pipeline as `[voice] ` + transcript, identical to typed text
-- [ ] **TRNS-03**: Transcription failure falls back to `[audio] (mime)` with log warning (zero message loss)
+- [x] **TRNS-02**: Transcribed audio enters pipeline as `[voice] ` + transcript, identical to typed text
+- [x] **TRNS-03**: Transcription failure falls back to `[audio] (mime)` with log warning (zero message loss)
 - [ ] **TRNS-04**: `no_speech_prob` quality guard — high probability of silence/noise falls back to `[audio]` instead of sending hallucinated text (configurable threshold, default 0.85)
 - [ ] **TRNS-05**: Audio content-hash caching — SHA-256 hash of audio bytes, in-memory map with TTL, avoids duplicate API calls on webhook retries
 
@@ -47,21 +47,21 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 ### Infrastructure
 
 - [ ] **INFR-01**: Retry with exponential backoff on 429/5xx — max 3 attempts, base 1s, factor 2x, jitter
-- [ ] **INFR-02**: `context.WithTimeout` per transcription call to prevent pipeline blocking
+- [x] **INFR-02**: `context.WithTimeout` per transcription call to prevent pipeline blocking
 - [x] **INFR-03**: OGG/Opus MIME normalization — use `mime/multipart.CreatePart` (not `CreateFormFile`) for correct Content-Type
 - [ ] **INFR-04**: Debug-level logging of `avg_logprob`, `no_speech_prob`, and detected language from verbose_json responses
 
 ### Wiring
 
 - [x] **WIRE-01**: Build Transcriber from config at startup in main.go (nil if disabled)
-- [ ] **WIRE-02**: Pass Transcriber to delivery layer — no new goroutines, transcription synchronous within message processing
-- [ ] **WIRE-03**: ExtractText receives optional Transcriber (nil = disabled, current behavior preserved)
+- [x] **WIRE-02**: Pass Transcriber to delivery layer — no new goroutines, transcription synchronous within message processing
+- [x] **WIRE-03**: ExtractText receives optional Transcriber (nil = disabled, current behavior preserved)
 
 ### Tests
 
 - [x] **TEST-01**: Table-driven tests for each cloud provider with HTTP test server mocking API responses
 - [x] **TEST-02**: Local whisper.cpp provider test with mock exec
-- [ ] **TEST-03**: Extract integration test with mock transcriber (success + failure fallback)
+- [x] **TEST-03**: Extract integration test with mock transcriber (success + failure fallback)
 - [x] **TEST-04**: Media download test with size limit enforcement
 - [x] **TEST-05**: Retry logic test (429, 5xx, success after retry, exhausted retries)
 - [ ] **TEST-06**: Content-hash cache test (hit, miss, TTL expiry)
@@ -112,17 +112,17 @@ Which phases cover which requirements. Updated during roadmap creation.
 | INFR-03 | Phase 2 | Complete (02-01) |
 | TEST-01 | Phase 2 | Complete (02-01) |
 | TEST-05 | Phase 2 | Complete |
-| TRNS-02 | Phase 3 | Pending |
-| TRNS-03 | Phase 3 | Pending |
+| TRNS-02 | Phase 3 | Complete |
+| TRNS-03 | Phase 3 | Complete |
 | LOCL-01 | Phase 3 | Complete |
 | LOCL-02 | Phase 3 | Complete |
 | LOCL-03 | Phase 3 | Complete |
 | LOCL-04 | Phase 3 | Complete |
-| WIRE-02 | Phase 3 | Pending |
-| WIRE-03 | Phase 3 | Pending |
-| INFR-02 | Phase 3 | Pending |
+| WIRE-02 | Phase 3 | Complete |
+| WIRE-03 | Phase 3 | Complete |
+| INFR-02 | Phase 3 | Complete |
 | TEST-02 | Phase 3 | Complete |
-| TEST-03 | Phase 3 | Pending |
+| TEST-03 | Phase 3 | Complete |
 | TRNS-04 | Phase 4 | Pending |
 | TRNS-05 | Phase 4 | Pending |
 | INFR-01 | Phase 4 | Pending |
