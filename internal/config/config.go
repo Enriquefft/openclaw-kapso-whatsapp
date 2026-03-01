@@ -23,17 +23,17 @@ type Config struct {
 
 // TranscribeConfig holds configuration for audio transcription providers.
 type TranscribeConfig struct {
-	Provider           string  `toml:"provider"`
-	APIKey             string  `toml:"api_key"`
-	Model              string  `toml:"model"`
-	Language           string  `toml:"language"`
-	MaxAudioSize       int64   `toml:"max_audio_size"`
-	BinaryPath         string  `toml:"binary_path"`
-	ModelPath          string  `toml:"model_path"`
-	Timeout            int     `toml:"timeout"`
-	NoSpeechThreshold  float64 `toml:"no_speech_threshold"`
-	CacheTTL           int     `toml:"cache_ttl"`
-	Debug              bool    `toml:"debug"`
+	Provider          string  `toml:"provider"`
+	APIKey            string  `toml:"api_key"`
+	Model             string  `toml:"model"`
+	Language          string  `toml:"language"`
+	MaxAudioSize      int64   `toml:"max_audio_size"`
+	BinaryPath        string  `toml:"binary_path"`
+	ModelPath         string  `toml:"model_path"`
+	Timeout           int     `toml:"timeout"`
+	NoSpeechThreshold float64 `toml:"no_speech_threshold"`
+	CacheTTL          int     `toml:"cache_ttl"`
+	Debug             bool    `toml:"debug"`
 }
 
 type KapsoConfig struct {

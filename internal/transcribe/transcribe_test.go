@@ -8,7 +8,6 @@ import (
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/transcribe"
 )
 
-
 func TestNew(t *testing.T) {
 	tests := []struct {
 		name        string

@@ -63,23 +63,23 @@ func TestDeepgram(t *testing.T) {
 	fakeAudio := []byte("fake-audio-bytes")
 
 	tests := []struct {
-		name            string
-		provider        deepgramProvider
-		serverStatus    int
-		serverBody      string
-		inputMIME       string
-		wantText        string
-		wantErr         bool
-		wantErrContains string
-		wantErrType     bool // want *httpError
-		wantErrStatus   int
-		checkAuth       bool
+		name             string
+		provider         deepgramProvider
+		serverStatus     int
+		serverBody       string
+		inputMIME        string
+		wantText         string
+		wantErr          bool
+		wantErrContains  string
+		wantErrType      bool // want *httpError
+		wantErrStatus    int
+		checkAuth        bool
 		checkContentType string
-		checkModel      string
-		checkSmartFmt   bool
-		checkLang       string
-		checkNoLang     bool
-		checkRawBody    bool // body is raw bytes (not multipart)
+		checkModel       string
+		checkSmartFmt    bool
+		checkLang        string
+		checkNoLang      bool
+		checkRawBody     bool // body is raw bytes (not multipart)
 	}{
 		{
 			name: "success",

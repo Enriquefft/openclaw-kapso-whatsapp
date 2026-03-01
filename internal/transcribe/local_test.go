@@ -89,17 +89,17 @@ func TestLocalWhisper(t *testing.T) {
 	transcript := "  hello local whisper  \n"
 
 	tests := []struct {
-		name            string
-		cfg             config.TranscribeConfig
-		wantNewErr      bool
+		name               string
+		cfg                config.TranscribeConfig
+		wantNewErr         bool
 		wantNewErrContains string
 
 		ffmpegFail  bool
 		whisperFail bool
 
-		wantTranscribeErr      bool
+		wantTranscribeErr         bool
 		wantTranscribeErrContains string
-		wantText               string
+		wantText                  string
 	}{
 		{
 			name: "newLocalWhisper empty ModelPath returns error",
@@ -107,8 +107,8 @@ func TestLocalWhisper(t *testing.T) {
 				BinaryPath: "whisper-cli",
 				ModelPath:  "",
 			},
-			wantNewErr:             true,
-			wantNewErrContains:     "model_path",
+			wantNewErr:         true,
+			wantNewErrContains: "model_path",
 		},
 		{
 			name: "Transcribe success returns trimmed transcript",
