@@ -9,7 +9,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 
 ### Transcription Core
 
-- [ ] **TRNS-01**: Transcriber interface with single method: `Transcribe(ctx context.Context, audio []byte, mimeType string) (string, error)`
+- [x] **TRNS-01**: Transcriber interface with single method: `Transcribe(ctx context.Context, audio []byte, mimeType string) (string, error)`
 - [ ] **TRNS-02**: Transcribed audio enters pipeline as `[voice] ` + transcript, identical to typed text
 - [ ] **TRNS-03**: Transcription failure falls back to `[audio] (mime)` with log warning (zero message loss)
 - [ ] **TRNS-04**: `no_speech_prob` quality guard — high probability of silence/noise falls back to `[audio]` instead of sending hallucinated text (configurable threshold, default 0.85)
@@ -31,10 +31,10 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 
 ### Media Download
 
-- [ ] **MEDL-01**: `DownloadMedia(url string) ([]byte, error)` method on Kapso client
-- [ ] **MEDL-02**: Authenticates with existing API key header
-- [ ] **MEDL-03**: Enforces configurable max size limit (default 25MB) via `io.LimitReader`
-- [ ] **MEDL-04**: Downloads immediately at call site — media URLs expire in ~5 minutes
+- [x] **MEDL-01**: `DownloadMedia(url string) ([]byte, error)` method on Kapso client
+- [x] **MEDL-02**: Authenticates with existing API key header
+- [x] **MEDL-03**: Enforces configurable max size limit (default 25MB) via `io.LimitReader`
+- [x] **MEDL-04**: Downloads immediately at call site — media URLs expire in ~5 minutes
 
 ### Configuration
 
@@ -53,7 +53,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 
 ### Wiring
 
-- [ ] **WIRE-01**: Build Transcriber from config at startup in main.go (nil if disabled)
+- [x] **WIRE-01**: Build Transcriber from config at startup in main.go (nil if disabled)
 - [ ] **WIRE-02**: Pass Transcriber to delivery layer — no new goroutines, transcription synchronous within message processing
 - [ ] **WIRE-03**: ExtractText receives optional Transcriber (nil = disabled, current behavior preserved)
 
@@ -62,7 +62,7 @@ Requirements for voice transcription milestone. Each maps to roadmap phases.
 - [ ] **TEST-01**: Table-driven tests for each cloud provider with HTTP test server mocking API responses
 - [ ] **TEST-02**: Local whisper.cpp provider test with mock exec
 - [ ] **TEST-03**: Extract integration test with mock transcriber (success + failure fallback)
-- [ ] **TEST-04**: Media download test with size limit enforcement
+- [x] **TEST-04**: Media download test with size limit enforcement
 - [ ] **TEST-05**: Retry logic test (429, 5xx, success after retry, exhausted retries)
 - [ ] **TEST-06**: Content-hash cache test (hit, miss, TTL expiry)
 
@@ -98,13 +98,13 @@ Which phases cover which requirements. Updated during roadmap creation.
 | CONF-03 | Phase 1 | Complete (01-01) |
 | CONF-04 | Phase 1 | Complete (01-01) |
 | CONF-05 | Phase 1 | Complete (01-01) |
-| TRNS-01 | Phase 1 | Pending |
-| MEDL-01 | Phase 1 | Pending |
-| MEDL-02 | Phase 1 | Pending |
-| MEDL-03 | Phase 1 | Pending |
-| MEDL-04 | Phase 1 | Pending |
-| WIRE-01 | Phase 1 | Pending |
-| TEST-04 | Phase 1 | Pending |
+| TRNS-01 | Phase 1 | Complete |
+| MEDL-01 | Phase 1 | Complete |
+| MEDL-02 | Phase 1 | Complete |
+| MEDL-03 | Phase 1 | Complete |
+| MEDL-04 | Phase 1 | Complete |
+| WIRE-01 | Phase 1 | Complete |
+| TEST-04 | Phase 1 | Complete |
 | PROV-01 | Phase 2 | Pending |
 | PROV-02 | Phase 2 | Pending |
 | PROV-03 | Phase 2 | Pending |

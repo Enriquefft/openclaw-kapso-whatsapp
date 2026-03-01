@@ -10,11 +10,11 @@ See: .planning/PROJECT.md (updated 2026-03-01)
 ## Current Position
 
 Phase: 1 of 4 (Foundation)
-Plan: 1 of 2 in current phase
+Plan: 2 of 2 in current phase (phase complete)
 Status: In progress
-Last activity: 2026-03-01 — Plan 01-01 complete: TranscribeConfig struct, defaults, env overrides, validation
+Last activity: 2026-03-01 — Plan 01-02 complete: Transcriber interface, DownloadMedia, main.go wiring
 
-Progress: [█░░░░░░░░░] 13%
+Progress: [██░░░░░░░░] 25%
 
 ## Performance Metrics
 
@@ -27,7 +27,7 @@ Progress: [█░░░░░░░░░] 13%
 
 | Phase | Plans | Total | Avg/Plan |
 |-------|-------|-------|----------|
-| 01-foundation | 1 | 2min | 2min |
+| 01-foundation | 2 | 4min | 2min |
 
 **Recent Trend:**
 - Last 5 plans: 01-01 (2min)
@@ -49,6 +49,10 @@ Recent decisions affecting current work:
 - [01-01]: MaxAudioSize validated non-zero in Validate() to guard TOML zero-value masking defaults
 - [01-01]: Provider env var auto-lowercased in applyEnv() for case-insensitive user input
 - [01-01]: Empty provider is valid config state — transcription disabled by default, not an error
+- [01-02]: Stub-crash pattern for cloud providers — New() errors at startup if configured before Phase 2 exists
+- [01-02]: maxBytes passed as DownloadMedia parameter (not stored on Client) — keeps Client stateless re: transcription config
+- [01-02]: io.LimitReader(body, maxBytes+1) sentinel avoids reading full oversized response while detecting overflow
+- [01-02]: local provider validates binary via exec.LookPath at startup, not at transcription time
 
 ### Pending Todos
 
@@ -64,5 +68,5 @@ None yet.
 ## Session Continuity
 
 Last session: 2026-03-01
-Stopped at: Completed 01-01-PLAN.md — TranscribeConfig config section done
+Stopped at: Completed 01-02-PLAN.md — Transcriber interface, DownloadMedia, main.go wiring done (Phase 1 complete)
 Resume file: None

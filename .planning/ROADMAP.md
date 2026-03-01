@@ -12,7 +12,7 @@ This milestone adds voice transcription to the existing WhatsApp-OpenClaw bridge
 
 Decimal phases appear between their surrounding integers in numeric order.
 
-- [ ] **Phase 1: Foundation** - Config section, Transcriber interface, factory, and media download
+- [x] **Phase 1: Foundation** - Config section, Transcriber interface, factory, and media download
 - [ ] **Phase 2: Cloud Providers** - OpenAI/Groq shared implementation and Deepgram provider
 - [ ] **Phase 3: Integration** - Local whisper.cpp provider, pipeline wiring, and end-to-end flow
 - [ ] **Phase 4: Reliability** - Retry, caching, no_speech_prob guard, debug logging, and full test coverage
@@ -33,7 +33,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 
 Plans:
 - [x] 01-01-PLAN.md — TranscribeConfig struct, TOML/env parsing, defaults, and validation
-- [ ] 01-02-PLAN.md — Transcriber interface, factory, DownloadMedia method, and main.go wiring
+- [x] 01-02-PLAN.md — Transcriber interface, factory, DownloadMedia method, and main.go wiring
 
 ### Phase 2: Cloud Providers
 **Goal**: Audio messages can be transcribed via Groq, OpenAI, or Deepgram using only stdlib HTTP
@@ -89,7 +89,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation | 1/2 | In progress | - |
+| 1. Foundation | 2/2 | Complete | 2026-03-01 |
 | 2. Cloud Providers | 0/2 | Not started | - |
 | 3. Integration | 0/2 | Not started | - |
 | 4. Reliability | 0/1 | Not started | - |
