@@ -139,12 +139,18 @@ type SendMessageRequest struct {
 	Text             TextContent `json:"text"`
 }
 
-// TypingIndicatorRequest is the payload for sending a typing indicator via Kapso.
-type TypingIndicatorRequest struct {
-	MessagingProduct string `json:"messaging_product"`
-	RecipientType    string `json:"recipient_type"`
-	To               string `json:"to"`
-	Type             string `json:"type"`
+// MarkReadRequest is the payload for marking a message as read via Kapso.
+// The optional TypingIndicator field triggers a typing indicator in the chat.
+type MarkReadRequest struct {
+	MessagingProduct string           `json:"messaging_product"`
+	Status           string           `json:"status"`
+	MessageID        string           `json:"message_id"`
+	TypingIndicator  *TypingIndicator `json:"typing_indicator,omitempty"`
+}
+
+// TypingIndicator controls the typing bubble shown to the user.
+type TypingIndicator struct {
+	Type string `json:"type"`
 }
 
 // SendMessageResponse is the response from the send message API.

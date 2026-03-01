@@ -52,7 +52,7 @@ func main() {
 	if err := gw.Connect(); err != nil {
 		log.Fatalf("failed to connect to gateway: %v", err)
 	}
-	defer gw.Close()
+	defer func() { _ = gw.Close() }()
 
 	client := kapso.NewClient(cfg.Kapso.APIKey, cfg.Kapso.PhoneNumberID)
 
@@ -118,7 +118,7 @@ func main() {
 	merge := &delivery.Merge{Sources: sources}
 	events := make(chan delivery.Event, 64)
 
-	go merge.Run(ctx, events)
+	go func() { _ = merge.Run(ctx, events) }()
 	go merge.StartCleanup(ctx, 10*time.Minute)
 
 	// Relay agent replies back to WhatsApp.
@@ -163,7 +163,7 @@ func main() {
 				continue
 			}
 			log.Printf("forwarded message %s from %s [role: %s, session: %s]", evt.ID, evt.From, role, sessionKey)
-			go rel.Send(ctx, evt.From, sessionKey, time.Now().UTC())
+			go rel.Send(ctx, evt.From, evt.ID, sessionKey, time.Now().UTC())
 		}
 	}()
 
@@ -180,11 +180,11 @@ func cleanupFunnel(proc *os.Process) {
 		return
 	}
 	log.Printf("stopping tailscale funnel (pid %d)", proc.Pid)
-	proc.Signal(syscall.SIGTERM)
+	_ = proc.Signal(syscall.SIGTERM)
 
 	done := make(chan struct{})
 	go func() {
-		proc.Wait()
+		_, _ = proc.Wait()
 		close(done)
 	}()
 
@@ -192,6 +192,6 @@ func cleanupFunnel(proc *os.Process) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		log.Printf("tailscale funnel did not exit, sending SIGKILL")
-		proc.Kill()
+		_ = proc.Kill()
 	}
 }

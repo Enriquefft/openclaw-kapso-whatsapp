@@ -98,10 +98,10 @@ func (c *Client) Connect() error {
 	c.conn = conn
 
 	// Read the challenge from the gateway.
-	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		c.conn = nil
 		return fmt.Errorf("read challenge: %w", err)
 	}
@@ -133,7 +133,7 @@ func (c *Client) Connect() error {
 
 	data, err := json.Marshal(connectReq)
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		c.conn = nil
 		return fmt.Errorf("marshal connect request: %w", err)
 	}
@@ -141,16 +141,16 @@ func (c *Client) Connect() error {
 	log.Printf("sending connect request")
 
 	if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		c.conn = nil
 		return fmt.Errorf("send connect: %w", err)
 	}
 
 	// Wait for response.
-	conn.SetReadDeadline(time.Now().Add(15 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(15 * time.Second))
 	_, msg, err = conn.ReadMessage()
 	if err != nil {
-		conn.Close()
+		_ = conn.Close()
 		c.conn = nil
 		return fmt.Errorf("read connect response: %w", err)
 	}
@@ -159,19 +159,19 @@ func (c *Client) Connect() error {
 
 	var resp ResponseFrame
 	if err := json.Unmarshal(msg, &resp); err != nil {
-		conn.Close()
+		_ = conn.Close()
 		c.conn = nil
 		return fmt.Errorf("parse connect response: %w", err)
 	}
 
 	if resp.Error != nil {
-		conn.Close()
+		_ = conn.Close()
 		c.conn = nil
 		return fmt.Errorf("connect rejected: %s", string(resp.Error))
 	}
 
 	// Clear deadline for normal operation.
-	conn.SetReadDeadline(time.Time{})
+	_ = conn.SetReadDeadline(time.Time{})
 
 	// Drain unsolicited gateway events in the background so the socket
 	// buffer never fills up and write operations don't stall.

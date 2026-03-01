@@ -122,7 +122,7 @@ func (p *openAIWhisper) Transcribe(ctx context.Context, audio []byte, mimeType s
 	if err != nil {
 		return "", fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

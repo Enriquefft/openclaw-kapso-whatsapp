@@ -65,15 +65,15 @@ type Relay struct {
 
 // Send polls the session JSONL until the agent produces a reply, then sends it
 // back to the WhatsApp sender. It respects ctx cancellation.
-func (r *Relay) Send(ctx context.Context, from, sessionKey string, since time.Time) {
+func (r *Relay) Send(ctx context.Context, from, messageID, sessionKey string, since time.Time) {
 	to := from
 	if !strings.HasPrefix(to, "+") {
 		to = "+" + to
 	}
 
-	// Send initial typing indicator.
-	if err := r.Client.SendTypingIndicator(to); err != nil {
-		log.Printf("relay: failed to send typing indicator to %s: %v", to, err)
+	// Mark as read + show typing indicator.
+	if err := r.Client.MarkReadWithTyping(messageID); err != nil {
+		log.Printf("relay: failed to mark read with typing for %s: %v", messageID, err)
 	}
 
 	deadline := time.Now().Add(3 * time.Minute)
@@ -97,8 +97,8 @@ func (r *Relay) Send(ctx context.Context, from, sessionKey string, since time.Ti
 
 		// Refresh typing indicator periodically.
 		if time.Since(lastTyping) >= typingRefresh {
-			if err := r.Client.SendTypingIndicator(to); err != nil {
-				log.Printf("relay: failed to refresh typing indicator to %s: %v", to, err)
+			if err := r.Client.MarkReadWithTyping(messageID); err != nil {
+				log.Printf("relay: failed to refresh typing for %s: %v", messageID, err)
 			}
 			lastTyping = time.Now()
 		}
@@ -134,6 +134,11 @@ func (r *Relay) Send(ctx context.Context, from, sessionKey string, since time.Ti
 			}
 		}
 		log.Printf("relay: sent %d chunk(s) to %s", len(chunks), to)
+
+		// Dismiss typing indicator by marking read without typing.
+		if err := r.Client.MarkRead(messageID); err != nil {
+			log.Printf("relay: failed to dismiss typing for %s: %v", messageID, err)
+		}
 		return
 	}
 }

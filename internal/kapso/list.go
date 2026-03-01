@@ -78,7 +78,7 @@ func (c *Client) ListMessages(params ListMessagesParams) (*ListMessagesResponse,
 	if err != nil {
 		return nil, fmt.Errorf("list messages: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

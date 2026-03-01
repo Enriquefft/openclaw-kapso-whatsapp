@@ -79,7 +79,7 @@ func TestExtractText_Image(t *testing.T) {
 
 func TestExtractText_ImageWithMediaURL(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewEncoder(w).Encode(kapso.MediaResponse{
+		_ = json.NewEncoder(w).Encode(kapso.MediaResponse{
 			URL:      "https://example.com/media/photo.jpg",
 			MimeType: "image/jpeg",
 			ID:       "media-123",
@@ -236,9 +236,9 @@ func TestExtractText_UnsupportedType(t *testing.T) {
 	ch := make(chan capture, 2)
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		var req kapso.SendMessageRequest
-		json.NewDecoder(r.Body).Decode(&req)
+		_ = json.NewDecoder(r.Body).Decode(&req)
 		ch <- capture{to: req.To, body: req.Text.Body}
-		json.NewEncoder(w).Encode(kapso.SendMessageResponse{})
+		_ = json.NewEncoder(w).Encode(kapso.SendMessageResponse{})
 	}))
 	defer srv.Close()
 
@@ -354,7 +354,7 @@ func TestExtractText_AudioTranscription(t *testing.T) {
 					return
 				}
 				w.WriteHeader(http.StatusOK)
-				w.Write([]byte(rawAudio))
+				_, _ = w.Write([]byte(rawAudio))
 				return
 			}
 			// Media URL endpoint — everything else.
@@ -366,7 +366,7 @@ func TestExtractText_AudioTranscription(t *testing.T) {
 			// We need the server URL but it's not available yet during construction,
 			// so we build the URL dynamically from the request host.
 			downloadURL := "http://" + r.Host + "/download/" + audioMediaID
-			json.NewEncoder(w).Encode(kapso.MediaResponse{
+			_ = json.NewEncoder(w).Encode(kapso.MediaResponse{
 				URL:      downloadURL,
 				MimeType: "audio/ogg",
 				ID:       audioMediaID,

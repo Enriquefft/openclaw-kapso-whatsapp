@@ -55,7 +55,7 @@ func (s *Server) Run(ctx context.Context, out chan<- delivery.Event) error {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		srv.Shutdown(shutdownCtx)
+		_ = srv.Shutdown(shutdownCtx)
 	}()
 
 	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
@@ -88,7 +88,7 @@ func (s *Server) handleVerification(w http.ResponseWriter, r *http.Request) {
 	if mode == "subscribe" && token == s.VerifyToken {
 		log.Printf("webhook verification successful")
 		w.WriteHeader(http.StatusOK)
-		fmt.Fprint(w, challenge)
+		_, _ = fmt.Fprint(w, challenge)
 		return
 	}
 
@@ -170,5 +170,5 @@ func validSignature(body []byte, header, secret string) bool {
 // handleHealth returns 200 OK — used by the CLI status command.
 func handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
-	fmt.Fprint(w, "ok")
+	_, _ = fmt.Fprint(w, "ok")
 }

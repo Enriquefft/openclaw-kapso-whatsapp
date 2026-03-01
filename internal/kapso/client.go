@@ -54,7 +54,7 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
@@ -73,14 +73,23 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 	return &result, nil
 }
 
-// SendTypingIndicator sends a typing indicator to the given phone number to
-// show that a response is being prepared.
-func (c *Client) SendTypingIndicator(to string) error {
-	req := TypingIndicatorRequest{
+// MarkRead marks a message as read. This sends blue checkmarks to the sender.
+func (c *Client) MarkRead(messageID string) error {
+	return c.markRead(messageID, nil)
+}
+
+// MarkReadWithTyping marks a message as read and shows a typing indicator.
+func (c *Client) MarkReadWithTyping(messageID string) error {
+	return c.markRead(messageID, &TypingIndicator{Type: "text"})
+}
+
+// markRead posts a mark-as-read request, optionally with a typing indicator.
+func (c *Client) markRead(messageID string, typing *TypingIndicator) error {
+	req := MarkReadRequest{
 		MessagingProduct: "whatsapp",
-		RecipientType:    "individual",
-		To:               to,
-		Type:             "typing",
+		Status:           "read",
+		MessageID:        messageID,
+		TypingIndicator:  typing,
 	}
 
 	body, err := json.Marshal(req)
@@ -101,12 +110,12 @@ func (c *Client) SendTypingIndicator(to string) error {
 	if err != nil {
 		return fmt.Errorf("send request: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	_, _ = io.Copy(io.Discard, resp.Body)
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("typing indicator error (status %d)", resp.StatusCode)
+		return fmt.Errorf("mark read error (status %d)", resp.StatusCode)
 	}
 
 	return nil
@@ -127,7 +136,7 @@ func (c *Client) DownloadMedia(url string, maxBytes int64) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("download media: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		errBody := make([]byte, 512)
@@ -150,7 +159,7 @@ func (c *Client) DownloadMedia(url string, maxBytes int64) ([]byte, error) {
 
 // GetMediaURL retrieves the download URL for a media attachment by its ID.
 func (c *Client) GetMediaURL(mediaID string) (*MediaResponse, error) {
-	url := fmt.Sprintf("%s/%s", baseURL, mediaID)
+	url := fmt.Sprintf("%s/%s?phone_number_id=%s", baseURL, mediaID, c.PhoneNumberID)
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
@@ -162,7 +171,7 @@ func (c *Client) GetMediaURL(mediaID string) (*MediaResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get media URL: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {

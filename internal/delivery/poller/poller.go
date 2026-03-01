@@ -2,6 +2,7 @@ package poller
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
 	"strconv"
@@ -26,7 +27,9 @@ type Poller struct {
 // Run polls the Kapso API on a ticker and emits events for each new inbound
 // message. It returns when ctx is cancelled.
 func (p *Poller) Run(ctx context.Context, out chan<- delivery.Event) error {
-	os.MkdirAll(p.StateDir, 0o700)
+	if err := os.MkdirAll(p.StateDir, 0o700); err != nil {
+		return fmt.Errorf("create state dir: %w", err)
+	}
 
 	lastPoll := loadState(p.StateFile)
 	if lastPoll.IsZero() {
@@ -129,5 +132,7 @@ func loadState(path string) time.Time {
 }
 
 func saveState(path string, t time.Time) {
-	os.WriteFile(path, []byte(t.Format(time.RFC3339)), 0o600)
+	if err := os.WriteFile(path, []byte(t.Format(time.RFC3339)), 0o600); err != nil {
+		log.Printf("WARN: failed to save poll state: %v", err)
+	}
 }

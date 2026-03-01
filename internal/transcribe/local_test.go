@@ -12,34 +12,6 @@ import (
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
 )
 
-// mockExecCmd returns an execCmd function that dispatches on the binary name.
-// ffmpegFn is called when the binary is "ffmpeg"; whisperFn is called otherwise.
-func mockExecCmd(
-	ffmpegFn func(ctx context.Context, args []string) error,
-	whisperFn func(ctx context.Context, args []string) error,
-) func(ctx context.Context, name string, args ...string) *exec.Cmd {
-	return func(ctx context.Context, name string, args ...string) *exec.Cmd {
-		// Build a script that calls back into test logic via env vars.
-		// We implement this differently: return a cmd that always succeeds/fails
-		// but we need side effects. Use a helper approach instead.
-		//
-		// We piggyback the side effects into a wrapper script approach using
-		// os/exec with shell=false. The cleanest approach for pure Go:
-		// return a fake *exec.Cmd whose Run() we override — but exec.Cmd.Run
-		// is not an interface. So we use a real subprocess: "true"/"false" for
-		// success/failure, and call the side-effect funcs before returning the Cmd.
-		//
-		// Better: return exec.Command("sh", "-c", script) to produce output files.
-		_ = ffmpegFn
-		_ = whisperFn
-		_ = name
-		_ = args
-		_ = ctx
-		// This is a placeholder — see the real implementation in each test case below.
-		return nil
-	}
-}
-
 // testExecCmd builds an injectable execCmd that:
 // - For ffmpeg: calls ffmpegSide for side effects (e.g. write WAV), returns exit code ffmpegExit.
 // - For whisper: calls whisperSide for side effects (e.g. write txt), returns exit code whisperExit.

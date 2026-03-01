@@ -63,7 +63,7 @@ func (p *localWhisper) Transcribe(ctx context.Context, audio []byte, _ string) (
 	if err != nil {
 		return "", fmt.Errorf("local provider: create temp dir: %w", err)
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 
 	// Write raw audio bytes.
 	rawPath := filepath.Join(dir, "audio.ogg")

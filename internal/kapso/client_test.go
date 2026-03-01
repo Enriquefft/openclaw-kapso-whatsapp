@@ -22,8 +22,8 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	return t.wrapped.RoundTrip(req)
 }
 
-func TestSendTypingIndicator(t *testing.T) {
-	t.Run("sends correct payload and headers", func(t *testing.T) {
+func TestMarkRead(t *testing.T) {
+	t.Run("sends correct payload without typing indicator", func(t *testing.T) {
 		var gotBody []byte
 		var gotContentType, gotAPIKey string
 
@@ -45,7 +45,7 @@ func TestSendTypingIndicator(t *testing.T) {
 			HTTPClient:    &http.Client{Transport: &rewriteTransport{base: srv.URL, wrapped: http.DefaultTransport}},
 		}
 
-		err := client.SendTypingIndicator("+1234567890")
+		err := client.MarkRead("wamid.abc123")
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -57,18 +57,21 @@ func TestSendTypingIndicator(t *testing.T) {
 			t.Errorf("X-API-Key = %q, want %q", gotAPIKey, "test-key")
 		}
 
-		var payload map[string]string
+		var payload map[string]interface{}
 		if err := json.Unmarshal(gotBody, &payload); err != nil {
 			t.Fatalf("unmarshal request body: %v", err)
 		}
-		if payload["type"] != "typing" {
-			t.Errorf("type = %q, want %q", payload["type"], "typing")
+		if payload["status"] != "read" {
+			t.Errorf("status = %q, want %q", payload["status"], "read")
 		}
-		if payload["to"] != "+1234567890" {
-			t.Errorf("to = %q, want %q", payload["to"], "+1234567890")
+		if payload["message_id"] != "wamid.abc123" {
+			t.Errorf("message_id = %q, want %q", payload["message_id"], "wamid.abc123")
 		}
 		if payload["messaging_product"] != "whatsapp" {
 			t.Errorf("messaging_product = %q, want %q", payload["messaging_product"], "whatsapp")
+		}
+		if _, ok := payload["typing_indicator"]; ok {
+			t.Error("typing_indicator should be omitted for MarkRead")
 		}
 	})
 
@@ -84,7 +87,7 @@ func TestSendTypingIndicator(t *testing.T) {
 			HTTPClient:    &http.Client{Transport: &rewriteTransport{base: srv.URL, wrapped: http.DefaultTransport}},
 		}
 
-		err := client.SendTypingIndicator("+1234567890")
+		err := client.MarkRead("wamid.abc123")
 		if err == nil {
 			t.Fatal("expected error, got nil")
 		}
@@ -94,12 +97,58 @@ func TestSendTypingIndicator(t *testing.T) {
 	})
 }
 
+func TestMarkReadWithTyping(t *testing.T) {
+	t.Run("includes typing indicator in payload", func(t *testing.T) {
+		var gotBody []byte
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			var err error
+			gotBody, err = io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		client := &Client{
+			APIKey:        "test-key",
+			PhoneNumberID: "12345",
+			HTTPClient:    &http.Client{Transport: &rewriteTransport{base: srv.URL, wrapped: http.DefaultTransport}},
+		}
+
+		err := client.MarkReadWithTyping("wamid.abc123")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var payload map[string]interface{}
+		if err := json.Unmarshal(gotBody, &payload); err != nil {
+			t.Fatalf("unmarshal request body: %v", err)
+		}
+		if payload["status"] != "read" {
+			t.Errorf("status = %q, want %q", payload["status"], "read")
+		}
+		if payload["message_id"] != "wamid.abc123" {
+			t.Errorf("message_id = %q, want %q", payload["message_id"], "wamid.abc123")
+		}
+
+		ti, ok := payload["typing_indicator"].(map[string]interface{})
+		if !ok {
+			t.Fatal("typing_indicator missing or wrong type")
+		}
+		if ti["type"] != "text" {
+			t.Errorf("typing_indicator.type = %q, want %q", ti["type"], "text")
+		}
+	})
+}
+
 func TestDownloadMedia(t *testing.T) {
 	t.Run("under limit returns full body", func(t *testing.T) {
 		body := []byte("hello audio data")
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write(body)
+			_, _ = w.Write(body)
 		}))
 		defer srv.Close()
 
@@ -122,7 +171,7 @@ func TestDownloadMedia(t *testing.T) {
 		body := []byte("exact limit data")
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write(body)
+			_, _ = w.Write(body)
 		}))
 		defer srv.Close()
 
@@ -151,7 +200,7 @@ func TestDownloadMedia(t *testing.T) {
 
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write(body)
+			_, _ = w.Write(body)
 		}))
 		defer srv.Close()
 
@@ -176,7 +225,7 @@ func TestDownloadMedia(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			gotKey = r.Header.Get("X-API-Key")
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("audio"))
+			_, _ = w.Write([]byte("audio"))
 		}))
 		defer srv.Close()
 
@@ -198,7 +247,7 @@ func TestDownloadMedia(t *testing.T) {
 	t.Run("non-200 status returns error with status code", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusForbidden)
-			fmt.Fprint(w, "forbidden")
+			_, _ = fmt.Fprint(w, "forbidden")
 		}))
 		defer srv.Close()
 
