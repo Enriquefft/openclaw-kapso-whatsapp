@@ -73,6 +73,42 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 	return &result, nil
 }
 
+// DownloadMedia downloads raw audio bytes from the given URL, enforcing a
+// maximum response size. The maxBytes limit is applied via io.LimitReader with
+// a +1 sentinel: if the server sends more than maxBytes, an error is returned.
+func (c *Client) DownloadMedia(url string, maxBytes int64) ([]byte, error) {
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		return nil, fmt.Errorf("create request: %w", err)
+	}
+
+	req.Header.Set("X-API-Key", c.APIKey)
+
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("download media: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		errBody := make([]byte, 512)
+		n, _ := resp.Body.Read(errBody)
+		return nil, fmt.Errorf("media download error (status %d): %s", resp.StatusCode, string(errBody[:n]))
+	}
+
+	// Read up to maxBytes+1 to detect responses that exceed the limit.
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("read media body: %w", err)
+	}
+
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("media response exceeds size limit (%d bytes)", maxBytes)
+	}
+
+	return data, nil
+}
+
 // GetMediaURL retrieves the download URL for a media attachment by its ID.
 func (c *Client) GetMediaURL(mediaID string) (*MediaResponse, error) {
 	url := fmt.Sprintf("%s/%s", baseURL, mediaID)
