@@ -139,6 +139,14 @@ type SendMessageRequest struct {
 	Text             TextContent `json:"text"`
 }
 
+// TypingIndicatorRequest is the payload for sending a typing indicator via Kapso.
+type TypingIndicatorRequest struct {
+	MessagingProduct string `json:"messaging_product"`
+	RecipientType    string `json:"recipient_type"`
+	To               string `json:"to"`
+	Type             string `json:"type"`
+}
+
 // SendMessageResponse is the response from the send message API.
 type SendMessageResponse struct {
 	MessagingProduct string `json:"messaging_product"`

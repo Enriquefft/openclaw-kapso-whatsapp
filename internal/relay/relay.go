@@ -71,9 +71,17 @@ func (r *Relay) Send(ctx context.Context, from, sessionKey string, since time.Ti
 		to = "+" + to
 	}
 
+	// Send initial typing indicator.
+	if err := r.Client.SendTypingIndicator(to); err != nil {
+		log.Printf("relay: failed to send typing indicator to %s: %v", to, err)
+	}
+
 	deadline := time.Now().Add(3 * time.Minute)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
+
+	lastTyping := time.Now()
+	const typingRefresh = 20 * time.Second
 
 	for {
 		if time.Now().After(deadline) {
@@ -85,6 +93,14 @@ func (r *Relay) Send(ctx context.Context, from, sessionKey string, since time.Ti
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+		}
+
+		// Refresh typing indicator periodically.
+		if time.Since(lastTyping) >= typingRefresh {
+			if err := r.Client.SendTypingIndicator(to); err != nil {
+				log.Printf("relay: failed to refresh typing indicator to %s: %v", to, err)
+			}
+			lastTyping = time.Now()
 		}
 
 		sessionFile, err := getSessionFile(r.SessionsJSON, sessionKey)

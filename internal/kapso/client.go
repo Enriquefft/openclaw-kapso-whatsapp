@@ -73,6 +73,45 @@ func (c *Client) SendText(to, text string) (*SendMessageResponse, error) {
 	return &result, nil
 }
 
+// SendTypingIndicator sends a typing indicator to the given phone number to
+// show that a response is being prepared.
+func (c *Client) SendTypingIndicator(to string) error {
+	req := TypingIndicatorRequest{
+		MessagingProduct: "whatsapp",
+		RecipientType:    "individual",
+		To:               to,
+		Type:             "typing",
+	}
+
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+
+	url := fmt.Sprintf("%s/%s/messages", baseURL, c.PhoneNumberID)
+	httpReq, err := http.NewRequest("POST", url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("X-API-Key", c.APIKey)
+
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return fmt.Errorf("send request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	_, _ = io.Copy(io.Discard, resp.Body)
+
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
+		return fmt.Errorf("typing indicator error (status %d)", resp.StatusCode)
+	}
+
+	return nil
+}
+
 // DownloadMedia downloads raw audio bytes from the given URL, enforcing a
 // maximum response size. The maxBytes limit is applied via io.LimitReader with
 // a +1 sentinel: if the server sends more than maxBytes, an error is returned.

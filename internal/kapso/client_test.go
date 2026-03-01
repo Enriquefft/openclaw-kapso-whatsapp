@@ -1,7 +1,9 @@
 package kapso
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -18,6 +20,78 @@ func (t *rewriteTransport) RoundTrip(req *http.Request) (*http.Response, error) 
 	req.URL.Scheme = "http"
 	req.URL.Host = strings.TrimPrefix(t.base, "http://")
 	return t.wrapped.RoundTrip(req)
+}
+
+func TestSendTypingIndicator(t *testing.T) {
+	t.Run("sends correct payload and headers", func(t *testing.T) {
+		var gotBody []byte
+		var gotContentType, gotAPIKey string
+
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			gotContentType = r.Header.Get("Content-Type")
+			gotAPIKey = r.Header.Get("X-API-Key")
+			var err error
+			gotBody, err = io.ReadAll(r.Body)
+			if err != nil {
+				t.Fatalf("read request body: %v", err)
+			}
+			w.WriteHeader(http.StatusOK)
+		}))
+		defer srv.Close()
+
+		client := &Client{
+			APIKey:        "test-key",
+			PhoneNumberID: "12345",
+			HTTPClient:    &http.Client{Transport: &rewriteTransport{base: srv.URL, wrapped: http.DefaultTransport}},
+		}
+
+		err := client.SendTypingIndicator("+1234567890")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		if gotContentType != "application/json" {
+			t.Errorf("Content-Type = %q, want %q", gotContentType, "application/json")
+		}
+		if gotAPIKey != "test-key" {
+			t.Errorf("X-API-Key = %q, want %q", gotAPIKey, "test-key")
+		}
+
+		var payload map[string]string
+		if err := json.Unmarshal(gotBody, &payload); err != nil {
+			t.Fatalf("unmarshal request body: %v", err)
+		}
+		if payload["type"] != "typing" {
+			t.Errorf("type = %q, want %q", payload["type"], "typing")
+		}
+		if payload["to"] != "+1234567890" {
+			t.Errorf("to = %q, want %q", payload["to"], "+1234567890")
+		}
+		if payload["messaging_product"] != "whatsapp" {
+			t.Errorf("messaging_product = %q, want %q", payload["messaging_product"], "whatsapp")
+		}
+	})
+
+	t.Run("returns error on non-200 status", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusForbidden)
+		}))
+		defer srv.Close()
+
+		client := &Client{
+			APIKey:        "test-key",
+			PhoneNumberID: "12345",
+			HTTPClient:    &http.Client{Transport: &rewriteTransport{base: srv.URL, wrapped: http.DefaultTransport}},
+		}
+
+		err := client.SendTypingIndicator("+1234567890")
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "403") {
+			t.Errorf("error %q does not contain status code 403", err.Error())
+		}
+	})
 }
 
 func TestDownloadMedia(t *testing.T) {
