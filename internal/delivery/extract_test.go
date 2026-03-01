@@ -1,6 +1,7 @@
 package delivery
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,16 @@ import (
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
 )
 
+// mockTranscriber is a test double for transcribe.Transcriber.
+type mockTranscriber struct {
+	text string
+	err  error
+}
+
+func (m *mockTranscriber) Transcribe(_ context.Context, _ []byte, _ string) (string, error) {
+	return m.text, m.err
+}
+
 func TestExtractText_Text(t *testing.T) {
 	msg := kapso.Message{
 		ID:   "m1",
@@ -18,7 +29,7 @@ func TestExtractText_Text(t *testing.T) {
 		From: "+1234567890",
 		Text: &kapso.TextContent{Body: "hello world"},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for text message")
 	}
@@ -33,7 +44,7 @@ func TestExtractText_TextNilBody(t *testing.T) {
 		Type: "text",
 		From: "+1234567890",
 	}
-	_, ok := ExtractText(msg, nil)
+	_, ok := ExtractText(msg, nil, nil, 0)
 	if ok {
 		t.Fatal("expected ok=false for text message with nil Text")
 	}
@@ -50,7 +61,7 @@ func TestExtractText_Image(t *testing.T) {
 			Caption:  "sunset photo",
 		},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for image message")
 	}
@@ -93,7 +104,7 @@ func TestExtractText_ImageWithMediaURL(t *testing.T) {
 			Caption:  "sunset",
 		},
 	}
-	text, ok := ExtractText(msg, client)
+	text, ok := ExtractText(msg, client, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for image message")
 	}
@@ -113,7 +124,7 @@ func TestExtractText_Document(t *testing.T) {
 			Filename: "report.pdf",
 		},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for document message")
 	}
@@ -136,7 +147,7 @@ func TestExtractText_DocumentCaptionFallback(t *testing.T) {
 			Caption:  "my report",
 		},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true")
 	}
@@ -155,7 +166,7 @@ func TestExtractText_Audio(t *testing.T) {
 			MimeType: "audio/ogg",
 		},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for audio message")
 	}
@@ -178,7 +189,7 @@ func TestExtractText_Video(t *testing.T) {
 			Caption:  "funny clip",
 		},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for video message")
 	}
@@ -202,7 +213,7 @@ func TestExtractText_Location(t *testing.T) {
 			Address:   "Peru",
 		},
 	}
-	text, ok := ExtractText(msg, nil)
+	text, ok := ExtractText(msg, nil, nil, 0)
 	if !ok {
 		t.Fatal("expected ok=true for location message")
 	}
@@ -245,7 +256,7 @@ func TestExtractText_UnsupportedType(t *testing.T) {
 			MimeType: "image/webp",
 		},
 	}
-	_, ok := ExtractText(msg, client)
+	_, ok := ExtractText(msg, client, nil, 0)
 	if ok {
 		t.Fatal("expected ok=false for unsupported sticker type")
 	}
@@ -266,7 +277,7 @@ func TestExtractText_NilMediaContent(t *testing.T) {
 			Type: typ,
 			From: "+1234567890",
 		}
-		_, ok := ExtractText(msg, nil)
+		_, ok := ExtractText(msg, nil, nil, 0)
 		if ok {
 			t.Errorf("expected ok=false for %s with nil content", typ)
 		}
@@ -320,6 +331,146 @@ func TestFormatLocationMessage_Minimal(t *testing.T) {
 	want := fmt.Sprintf("[location] (%.6f, %.6f)", 0.0, 0.0)
 	if text != want {
 		t.Fatalf("got %q, want %q", text, want)
+	}
+}
+
+// TestExtractText_AudioTranscription tests the transcription branch of ExtractText.
+// A test HTTP server handles two request patterns:
+//   - GET /{mediaID}        — returns MediaResponse JSON with download URL
+//   - GET /download/{mediaID} — returns raw audio bytes
+func TestExtractText_AudioTranscription(t *testing.T) {
+	const audioMediaID = "audio-media-001"
+	const rawAudio = "fake-audio-bytes"
+
+	// newTestServer creates a server that handles both media URL and download requests.
+	// If mediaURLStatus != 200, the media URL endpoint returns that error status.
+	// If downloadStatus != 200, the download endpoint returns that error status.
+	newTestServer := func(mediaURLStatus, downloadStatus int) *httptest.Server {
+		return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if strings.HasPrefix(r.URL.Path, "/download/") {
+				if downloadStatus != http.StatusOK {
+					http.Error(w, "download error", downloadStatus)
+					return
+				}
+				w.WriteHeader(http.StatusOK)
+				w.Write([]byte(rawAudio))
+				return
+			}
+			// Media URL endpoint — everything else.
+			if mediaURLStatus != http.StatusOK {
+				http.Error(w, "media url error", mediaURLStatus)
+				return
+			}
+			// Return a MediaResponse with the download URL pointing to this server.
+			// We need the server URL but it's not available yet during construction,
+			// so we build the URL dynamically from the request host.
+			downloadURL := "http://" + r.Host + "/download/" + audioMediaID
+			json.NewEncoder(w).Encode(kapso.MediaResponse{
+				URL:      downloadURL,
+				MimeType: "audio/ogg",
+				ID:       audioMediaID,
+			})
+		}))
+	}
+
+	tests := []struct {
+		name           string
+		transcriber    *mockTranscriber
+		mediaURLStatus int
+		downloadStatus int
+		wantPrefix     string
+		wantOK         bool
+	}{
+		{
+			name:           "success",
+			transcriber:    &mockTranscriber{text: "hello world", err: nil},
+			mediaURLStatus: http.StatusOK,
+			downloadStatus: http.StatusOK,
+			wantPrefix:     "[voice] hello world",
+			wantOK:         true,
+		},
+		{
+			name:           "transcription_error",
+			transcriber:    &mockTranscriber{text: "", err: fmt.Errorf("mock error")},
+			mediaURLStatus: http.StatusOK,
+			downloadStatus: http.StatusOK,
+			wantPrefix:     "[audio]",
+			wantOK:         true,
+		},
+		{
+			name:           "nil_transcriber",
+			transcriber:    nil,
+			mediaURLStatus: http.StatusOK,
+			downloadStatus: http.StatusOK,
+			wantPrefix:     "[audio]",
+			wantOK:         true,
+		},
+		{
+			name:           "media_url_error",
+			transcriber:    &mockTranscriber{text: "hello", err: nil},
+			mediaURLStatus: http.StatusInternalServerError,
+			downloadStatus: http.StatusOK,
+			wantPrefix:     "[audio]",
+			wantOK:         true,
+		},
+		{
+			name:           "download_error",
+			transcriber:    &mockTranscriber{text: "hello", err: nil},
+			mediaURLStatus: http.StatusOK,
+			downloadStatus: http.StatusInternalServerError,
+			wantPrefix:     "[audio]",
+			wantOK:         true,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := newTestServer(tc.mediaURLStatus, tc.downloadStatus)
+			defer srv.Close()
+
+			client := &kapso.Client{
+				APIKey:        "test-key",
+				PhoneNumberID: "12345",
+				HTTPClient: &http.Client{
+					Transport: &rewriteTransport{base: srv.URL, wrapped: http.DefaultTransport},
+				},
+			}
+
+			msg := kapso.Message{
+				ID:   "audio-msg-001",
+				Type: "audio",
+				From: "+1234567890",
+				Audio: &kapso.AudioContent{
+					ID:       audioMediaID,
+					MimeType: "audio/ogg",
+				},
+			}
+
+			text, ok := ExtractText(msg, client, tc.transcriber, 1024*1024)
+			if ok != tc.wantOK {
+				t.Fatalf("ok=%v, want %v", ok, tc.wantOK)
+			}
+			if !strings.HasPrefix(text, tc.wantPrefix) {
+				t.Errorf("text=%q, want prefix %q", text, tc.wantPrefix)
+			}
+		})
+	}
+}
+
+// TestExtractText_AudioNilContent verifies that a nil Audio field returns ("", false).
+func TestExtractText_AudioNilContent(t *testing.T) {
+	msg := kapso.Message{
+		ID:   "audio-nil",
+		Type: "audio",
+		From: "+1234567890",
+		// Audio is nil
+	}
+	text, ok := ExtractText(msg, nil, &mockTranscriber{text: "should not be called"}, 1024)
+	if ok {
+		t.Fatal("expected ok=false for audio message with nil Audio content")
+	}
+	if text != "" {
+		t.Fatalf("expected empty text, got %q", text)
 	}
 }
 
