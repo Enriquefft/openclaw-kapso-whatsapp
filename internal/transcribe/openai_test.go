@@ -13,8 +13,14 @@ import (
 	"testing"
 )
 
-// whisperVerboseJSON is the mock response fixture.
-const whisperVerboseJSON = `{"text":"hello world","language":"en","duration":1.5}`
+// whisperVerboseJSON is the mock response fixture with full verbose_json fields.
+const whisperVerboseJSON = `{"text":"hello world","language":"en","duration":1.5,"segments":[{"avg_logprob":-0.3,"no_speech_prob":0.05}]}`
+
+// whisperHighNoSpeechJSON is a fixture with a high no_speech_prob value.
+const whisperHighNoSpeechJSON = `{"text":"hallucinated text","language":"en","duration":1.5,"segments":[{"avg_logprob":-0.3,"no_speech_prob":0.95}]}`
+
+// whisperEmptySegmentsJSON is a fixture with no segments (short silent clip).
+const whisperEmptySegmentsJSON = `{"text":"ok","language":"en","duration":0.5,"segments":[]}`
 
 // newMockWhisperServer creates a test server that parses multipart and
 // validates/records fields, then returns a JSON response.
@@ -82,6 +88,7 @@ func TestOpenAIWhisper(t *testing.T) {
 		wantText        string
 		wantErr         bool
 		wantErrType     bool // want *httpError
+		wantNoSpeechErr bool // want *noSpeechError
 		wantErrStatus   int
 		checkAuth       bool
 		checkFileType   string
@@ -174,6 +181,56 @@ func TestOpenAIWhisper(t *testing.T) {
 			wantText:     "hello world",
 			checkModel:   "whisper-large-v3",
 		},
+		{
+			name: "no_speech_prob below threshold returns transcript",
+			provider: openAIWhisper{
+				APIKey:            "test-key",
+				Model:             "whisper-1",
+				NoSpeechThreshold: 0.85,
+			},
+			serverStatus: 200,
+			serverBody:   whisperVerboseJSON, // no_speech_prob=0.05, below 0.85
+			inputMIME:    "audio/ogg",
+			wantText:     "hello world",
+		},
+		{
+			name: "no_speech_prob above threshold returns error",
+			provider: openAIWhisper{
+				APIKey:            "test-key",
+				Model:             "whisper-1",
+				NoSpeechThreshold: 0.85,
+			},
+			serverStatus:    200,
+			serverBody:      whisperHighNoSpeechJSON, // no_speech_prob=0.95, above 0.85
+			inputMIME:       "audio/ogg",
+			wantErr:         true,
+			wantNoSpeechErr: true,
+		},
+		{
+			name: "empty segments skips guard returns text",
+			provider: openAIWhisper{
+				APIKey:            "test-key",
+				Model:             "whisper-1",
+				NoSpeechThreshold: 0.85,
+			},
+			serverStatus: 200,
+			serverBody:   whisperEmptySegmentsJSON,
+			inputMIME:    "audio/ogg",
+			wantText:     "ok",
+		},
+		{
+			name: "debug logging enabled no error",
+			provider: openAIWhisper{
+				APIKey:            "test-key",
+				Model:             "whisper-1",
+				NoSpeechThreshold: 0.85,
+				Debug:             true,
+			},
+			serverStatus: 200,
+			serverBody:   whisperVerboseJSON,
+			inputMIME:    "audio/ogg",
+			wantText:     "hello world",
+		},
 	}
 
 	for _, tc := range tests {
@@ -197,6 +254,15 @@ func TestOpenAIWhisper(t *testing.T) {
 					}
 					if he.StatusCode != tc.wantErrStatus {
 						t.Errorf("httpError.StatusCode = %d, want %d", he.StatusCode, tc.wantErrStatus)
+					}
+				}
+				if tc.wantNoSpeechErr {
+					var nse *noSpeechError
+					if !errors.As(err, &nse) {
+						t.Fatalf("expected *noSpeechError, got %T: %v", err, err)
+					}
+					if got != "" {
+						t.Errorf("Transcribe() text = %q, want empty string on noSpeechError", got)
 					}
 				}
 				return

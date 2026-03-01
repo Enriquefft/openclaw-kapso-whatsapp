@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"strings"
 )
 
 // httpError is returned when the provider responds with a non-200 status code.
@@ -21,14 +23,38 @@ func (e *httpError) Error() string {
 	return fmt.Sprintf("provider returned %d: %s", e.StatusCode, e.Body)
 }
 
+// noSpeechError is returned when the no_speech_prob metric exceeds the
+// configured threshold, indicating likely silence or noise rather than speech.
+type noSpeechError struct {
+	Prob      float64
+	Threshold float64
+}
+
+func (e *noSpeechError) Error() string {
+	return fmt.Sprintf("no_speech_prob %.4f exceeds threshold %.2f", e.Prob, e.Threshold)
+}
+
 // openAIWhisper implements Transcriber for both OpenAI and Groq via the
 // OpenAI-compatible Whisper API. Use different BaseURLs to target each service.
 type openAIWhisper struct {
-	BaseURL    string
-	APIKey     string
-	Model      string
-	Language   string
-	HTTPClient *http.Client
+	BaseURL           string
+	APIKey            string
+	Model             string
+	Language          string
+	NoSpeechThreshold float64
+	Debug             bool
+	HTTPClient        *http.Client
+}
+
+// whisperVerboseResponse holds the full verbose_json response from the Whisper API.
+type whisperVerboseResponse struct {
+	Text     string  `json:"text"`
+	Language string  `json:"language"`
+	Duration float64 `json:"duration"`
+	Segments []struct {
+		AvgLogprob   float64 `json:"avg_logprob"`
+		NoSpeechProb float64 `json:"no_speech_prob"`
+	} `json:"segments"`
 }
 
 // client returns the configured HTTP client or the default one.
@@ -37,6 +63,14 @@ func (p *openAIWhisper) client() *http.Client {
 		return p.HTTPClient
 	}
 	return http.DefaultClient
+}
+
+// providerName derives the provider name from BaseURL for logging.
+func (p *openAIWhisper) providerName() string {
+	if strings.Contains(p.BaseURL, "groq") {
+		return "groq"
+	}
+	return "openai"
 }
 
 // Transcribe sends audio bytes to the Whisper API and returns the transcript.
@@ -99,11 +133,36 @@ func (p *openAIWhisper) Transcribe(ctx context.Context, audio []byte, mimeType s
 		return "", &httpError{StatusCode: resp.StatusCode, Body: string(body)}
 	}
 
-	var result struct {
-		Text string `json:"text"`
-	}
+	var result whisperVerboseResponse
 	if err = json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("parse response: %w", err)
+	}
+
+	// Compute metrics across segments.
+	var maxNoSpeech, sumLogprob float64
+	for _, seg := range result.Segments {
+		if seg.NoSpeechProb > maxNoSpeech {
+			maxNoSpeech = seg.NoSpeechProb
+		}
+		sumLogprob += seg.AvgLogprob
+	}
+	var avgLogprob float64
+	if len(result.Segments) > 0 {
+		avgLogprob = sumLogprob / float64(len(result.Segments))
+	}
+
+	// Debug logging: emit quality metrics when enabled.
+	if p.Debug {
+		log.Printf("[transcribe:debug] provider=%s model=%s language=%s avg_logprob=%.4f no_speech_prob=%.4f duration_ms=%.0f",
+			p.providerName(), p.Model, result.Language, avgLogprob, maxNoSpeech, result.Duration*1000)
+	}
+
+	// No-speech guard: reject likely-silent audio to prevent hallucinated transcripts.
+	// Only applied when segments are present (empty segments = short clip, skip guard).
+	if len(result.Segments) > 0 && p.NoSpeechThreshold > 0 && maxNoSpeech >= p.NoSpeechThreshold {
+		log.Printf("[transcribe:warn] no_speech_prob %.4f >= threshold %.2f — rejecting transcript to prevent hallucination",
+			maxNoSpeech, p.NoSpeechThreshold)
+		return "", &noSpeechError{Prob: maxNoSpeech, Threshold: p.NoSpeechThreshold}
 	}
 
 	return result.Text, nil

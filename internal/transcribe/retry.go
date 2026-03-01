@@ -1,3 +1,4 @@
+// INFR-01: Verified — 3 attempts, 1s base, 2x factor, 0.25 jitter, context cancellation.
 package transcribe
 
 import (
