@@ -1,6 +1,7 @@
 ---
 name: whatsapp
 description: Send WhatsApp messages via Kapso (outbound to third parties on owner instruction)
+user-invocable: true
 ---
 
 # WhatsApp Messaging (Kapso)
