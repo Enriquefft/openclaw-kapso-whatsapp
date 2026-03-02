@@ -45,6 +45,34 @@ kapso-whatsapp-bridge
 
 That's it — polling mode works with zero configuration. To cut latency to under 1 second, see [Tailscale Funnel mode](#tailscale-funnel-zero-config-tunnel).
 
+## Requirements
+
+- OpenClaw installed and gateway running (default: `ws://127.0.0.1:18789`)
+- Kapso credentials:
+  - `KAPSO_API_KEY`
+  - `KAPSO_PHONE_NUMBER_ID`
+- If OpenClaw gateway auth mode is `token`, set `OPENCLAW_TOKEN`
+- `curl` (for preflight/API checks)
+
+## Fast install (prebuilt binaries + preflight)
+
+No Go toolchain required.
+
+```bash
+git clone https://github.com/Enriquefft/openclaw-kapso-whatsapp
+cd openclaw-kapso-whatsapp
+
+# Installs to ~/.local/bin by default (override with INSTALL_DIR=/your/bin)
+./scripts/install-binaries.sh
+
+export KAPSO_API_KEY="your-key"
+export KAPSO_PHONE_NUMBER_ID="your-phone-number-id"
+# export OPENCLAW_TOKEN="your-gateway-token"   # only if gateway auth mode is token
+
+./scripts/preflight.sh
+kapso-whatsapp-bridge
+```
+
 ## Installation
 
 ### Go install
@@ -63,6 +91,12 @@ cp skills/whatsapp/SKILL.md ~/.openclaw/skills/whatsapp/SKILL.md
 ### Prebuilt binaries
 
 Download the latest release for your platform from [GitHub Releases](https://github.com/Enriquefft/openclaw-kapso-whatsapp/releases).
+
+Or run:
+
+```bash
+./scripts/install-binaries.sh
+```
 
 ### NixOS / Home Manager
 
@@ -366,6 +400,8 @@ skills/
 
 ```bash
 just build          # Build both binaries
+just install-binaries  # Install prebuilt binaries from releases
+just preflight      # Check env vars + gateway + Kapso credentials
 just test           # Run tests
 just lint           # Run golangci-lint
 just check          # Run tests + vet + format check

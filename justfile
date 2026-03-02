@@ -35,6 +35,14 @@ install:
     go install ./cmd/kapso-whatsapp-cli
     go install ./cmd/kapso-whatsapp-bridge
 
+# Install prebuilt binaries from GitHub Releases (no Go toolchain needed)
+install-binaries:
+    ./scripts/install-binaries.sh
+
+# Validate required env vars, OpenClaw gateway access, and Kapso credentials
+preflight:
+    ./scripts/preflight.sh
+
 # Clean build artifacts
 clean:
     rm -f kapso-whatsapp-cli kapso-whatsapp-bridge
