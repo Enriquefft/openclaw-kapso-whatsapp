@@ -40,6 +40,11 @@ No config file. No database. No reverse proxy.
 ```bash
 export KAPSO_API_KEY="your-key"
 export KAPSO_PHONE_NUMBER_ID="your-phone-number-id"
+
+# Verify everything is configured correctly
+kapso-whatsapp-cli preflight
+
+# Start the bridge
 kapso-whatsapp-bridge
 ```
 
@@ -47,11 +52,16 @@ That's it — polling mode works with zero configuration. To cut latency to unde
 
 ## Installation
 
-### Go install
+Install both binaries with a single command:
 
 ```bash
-go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@latest
-go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-bridge@latest
+curl -fsSL https://raw.githubusercontent.com/Enriquefft/openclaw-kapso-whatsapp/main/scripts/install.sh | bash
+```
+
+This downloads the latest release, verifies SHA256 checksums, and installs to `~/.local/bin`. Override the install directory or version:
+
+```bash
+INSTALL_DIR=/usr/local/bin TAG=v0.2.1 curl -fsSL https://raw.githubusercontent.com/Enriquefft/openclaw-kapso-whatsapp/main/scripts/install.sh | bash
 ```
 
 Copy the agent skill definition into your OpenClaw workspace:
@@ -59,10 +69,6 @@ Copy the agent skill definition into your OpenClaw workspace:
 ```bash
 cp skills/whatsapp/SKILL.md ~/.openclaw/skills/whatsapp/SKILL.md
 ```
-
-### Prebuilt binaries
-
-Download the latest release for your platform from [GitHub Releases](https://github.com/Enriquefft/openclaw-kapso-whatsapp/releases).
 
 ### NixOS / Home Manager
 
@@ -361,6 +367,13 @@ skills/
 
 - Go 1.22+
 - (Optional) [just](https://github.com/casey/just) command runner
+
+### Building from source
+
+```bash
+go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-cli@latest
+go install github.com/Enriquefft/openclaw-kapso-whatsapp/cmd/kapso-whatsapp-bridge@latest
+```
 
 ### Building and testing
 
