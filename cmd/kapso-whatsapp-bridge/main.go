@@ -16,6 +16,7 @@ import (
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/poller"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/webhook"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/device"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/gateway"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/kapso"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/relay"
@@ -47,8 +48,15 @@ func main() {
 		log.Fatal("KAPSO_WEBHOOK_VERIFY_TOKEN must be set when using tailscale or domain mode")
 	}
 
+	// Load or generate persistent device identity for gateway pairing.
+	devID, err := device.LoadOrCreate(cfg.State.Dir)
+	if err != nil {
+		log.Fatalf("device identity: %v", err)
+	}
+	log.Printf("device fingerprint: %s", devID.DeviceID())
+
 	// Connect to OpenClaw gateway.
-	gw := gateway.NewClient(cfg.Gateway.URL, cfg.Gateway.Token)
+	gw := gateway.NewClient(cfg.Gateway.URL, cfg.Gateway.Token, devID)
 	if err := gw.Connect(); err != nil {
 		log.Fatalf("failed to connect to gateway: %v", err)
 	}

@@ -73,7 +73,7 @@ func TestConnectRequestsReadAndWriteScopes(t *testing.T) {
 	defer close(done)
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
-	client := NewClient(wsURL, "test-token-nobody-expects-the-spanish-inquisition")
+	client := NewClient(wsURL, "test-token-nobody-expects-the-spanish-inquisition", nil)
 
 	if err := client.Connect(); err != nil {
 		t.Fatalf("Connect() failed: %v", err)
@@ -194,7 +194,7 @@ func TestConnectForwardsAuthToken(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
 	wantToken := "surely-you-cant-be-serious-i-am-serious-and-dont-call-me-shirley"
-	client := NewClient(wsURL, wantToken)
+	client := NewClient(wsURL, wantToken, nil)
 
 	if err := client.Connect(); err != nil {
 		t.Fatalf("Connect() failed: %v", err)
@@ -223,5 +223,254 @@ func TestConnectForwardsAuthToken(t *testing.T) {
 
 	if frame.Params.Auth.Token != wantToken {
 		t.Fatalf("expected token %q, got %q", wantToken, frame.Params.Auth.Token)
+	}
+}
+
+// mockSigner is a test double for the Signer interface.
+type mockSigner struct {
+	id    string
+	pubK  string
+	sig   string
+	ts    int64
+	nonce string
+}
+
+func (m *mockSigner) DeviceID() string        { return m.id }
+func (m *mockSigner) PublicKeyBase64() string { return m.pubK }
+func (m *mockSigner) Sign(nonce string) (string, int64, error) {
+	m.nonce = nonce
+	return m.sig, m.ts, nil
+}
+
+// TestConnectIncludesDeviceIdentity verifies that when a Signer is provided,
+// the connect request contains a populated device object with the correct
+// fields — the whole reason we're here, like Gandalf at the Bridge of
+// Khazad-dûm but for JSON fields.
+func TestConnectIncludesDeviceIdentity(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	connectFrame := make(chan []byte, 1)
+	serverErr := make(chan error, 1)
+	done := make(chan struct{})
+
+	challengeNonce := "test-challenge-nonce-from-gateway"
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			serverErr <- fmt.Errorf("upgrade: %w", err)
+			return
+		}
+		defer conn.Close()
+
+		// Send challenge with nonce.
+		challenge := fmt.Sprintf(`{"type":"event","method":"challenge","params":{"nonce":"%s"}}`, challengeNonce)
+		if err := conn.WriteMessage(websocket.TextMessage, []byte(challenge)); err != nil {
+			serverErr <- fmt.Errorf("write challenge: %w", err)
+			return
+		}
+
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			serverErr <- fmt.Errorf("read connect: %w", err)
+			return
+		}
+		connectFrame <- msg
+
+		resp := ResponseFrame{
+			Type:   "res",
+			ID:     "kapso-1",
+			Result: json.RawMessage(`{"ok": true}`),
+		}
+		data, _ := json.Marshal(resp)
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			serverErr <- fmt.Errorf("write response: %w", err)
+			return
+		}
+
+		<-done
+	}))
+	defer srv.Close()
+	defer close(done)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+
+	signer := &mockSigner{
+		id:   "device-fingerprint-abc",
+		pubK: "dGVzdC1wdWJsaWMta2V5",
+		sig:  "dGVzdC1zaWduYXR1cmU=",
+		ts:   1737264000000,
+	}
+
+	client := NewClient(wsURL, "test-token", signer)
+
+	if err := client.Connect(); err != nil {
+		t.Fatalf("Connect() failed: %v", err)
+	}
+	defer client.Close()
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server handler error: %v", err)
+	default:
+	}
+
+	raw := <-connectFrame
+
+	var frame struct {
+		Params struct {
+			Device *struct {
+				ID        string `json:"id"`
+				PublicKey string `json:"publicKey"`
+				Signature string `json:"signature"`
+				SignedAt  int64  `json:"signedAt"`
+				Nonce     string `json:"nonce"`
+			} `json:"device"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("unmarshal connect frame: %v", err)
+	}
+
+	if frame.Params.Device == nil {
+		t.Fatal("device field missing from connect request — this is the bug we're fixing")
+	}
+
+	d := frame.Params.Device
+	if d.ID != "device-fingerprint-abc" {
+		t.Errorf("device.id: got %q, want %q", d.ID, "device-fingerprint-abc")
+	}
+	if d.PublicKey != "dGVzdC1wdWJsaWMta2V5" {
+		t.Errorf("device.publicKey: got %q, want %q", d.PublicKey, "dGVzdC1wdWJsaWMta2V5")
+	}
+	if d.Signature != "dGVzdC1zaWduYXR1cmU=" {
+		t.Errorf("device.signature: got %q, want %q", d.Signature, "dGVzdC1zaWduYXR1cmU=")
+	}
+	if d.SignedAt != 1737264000000 {
+		t.Errorf("device.signedAt: got %d, want %d", d.SignedAt, 1737264000000)
+	}
+	if d.Nonce != challengeNonce {
+		t.Errorf("device.nonce: got %q, want %q", d.Nonce, challengeNonce)
+	}
+
+	// Verify signer received the correct nonce from the challenge.
+	if signer.nonce != challengeNonce {
+		t.Errorf("signer received nonce %q, want %q", signer.nonce, challengeNonce)
+	}
+}
+
+// TestConnectWithoutSignerOmitsDevice verifies that when no Signer is
+// provided, the device field is absent from the connect request.
+func TestConnectWithoutSignerOmitsDevice(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	connectFrame := make(chan []byte, 1)
+	serverErr := make(chan error, 1)
+	done := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			serverErr <- fmt.Errorf("upgrade: %w", err)
+			return
+		}
+		defer conn.Close()
+
+		challenge := ResponseFrame{Type: "event", Method: "challenge"}
+		data, _ := json.Marshal(challenge)
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			serverErr <- fmt.Errorf("write challenge: %w", err)
+			return
+		}
+
+		_, msg, err := conn.ReadMessage()
+		if err != nil {
+			serverErr <- fmt.Errorf("read connect: %w", err)
+			return
+		}
+		connectFrame <- msg
+
+		resp := ResponseFrame{
+			Type:   "res",
+			ID:     "kapso-1",
+			Result: json.RawMessage(`{"ok": true}`),
+		}
+		data, _ = json.Marshal(resp)
+		if err := conn.WriteMessage(websocket.TextMessage, data); err != nil {
+			serverErr <- fmt.Errorf("write response: %w", err)
+			return
+		}
+
+		<-done
+	}))
+	defer srv.Close()
+	defer close(done)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	client := NewClient(wsURL, "test-token", nil)
+
+	if err := client.Connect(); err != nil {
+		t.Fatalf("Connect() failed: %v", err)
+	}
+	defer client.Close()
+
+	select {
+	case err := <-serverErr:
+		t.Fatalf("server handler error: %v", err)
+	default:
+	}
+
+	raw := <-connectFrame
+
+	// The "device" key should not be present at all (omitempty).
+	var generic map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &generic); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+
+	var params map[string]json.RawMessage
+	if err := json.Unmarshal(generic["params"], &params); err != nil {
+		t.Fatalf("unmarshal params: %v", err)
+	}
+
+	if _, exists := params["device"]; exists {
+		t.Error("device field should be absent when no signer is provided")
+	}
+}
+
+// TestConnectWithSignerButNoNonceErrors verifies that when a Signer is
+// configured but the gateway challenge contains no nonce, Connect returns
+// a clear error instead of silently omitting the device field.
+func TestConnectWithSignerButNoNonceErrors(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	done := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Send challenge without nonce.
+		challenge := ResponseFrame{Type: "event", Method: "challenge"}
+		data, _ := json.Marshal(challenge)
+		_ = conn.WriteMessage(websocket.TextMessage, data)
+
+		<-done
+	}))
+	defer srv.Close()
+	defer close(done)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	signer := &mockSigner{id: "test", pubK: "dGVzdA==", sig: "c2ln", ts: 1}
+	client := NewClient(wsURL, "test-token", signer)
+
+	err := client.Connect()
+	if err == nil {
+		client.Close()
+		t.Fatal("expected error when signer is configured but challenge has no nonce")
+	}
+
+	if !strings.Contains(err.Error(), "missing nonce") {
+		t.Errorf("error should mention missing nonce, got: %v", err)
 	}
 }
