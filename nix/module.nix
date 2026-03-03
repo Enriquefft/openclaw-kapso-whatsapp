@@ -52,39 +52,42 @@ let
   loadSecrets = pkgs.writeShellScript "kapso-load-secrets" ''
     wait_secret() {
       local file="$1"
-      local deadline=$(( $(date +%s) + 60 ))
+      local deadline=$(( $(${pkgs.coreutils}/bin/date +%s) + 60 ))
       while [ ! -s "$file" ]; do
-        if [ "$(date +%s)" -ge "$deadline" ]; then
+        if [ "$(${pkgs.coreutils}/bin/date +%s)" -ge "$deadline" ]; then
           echo "kapso-load-secrets: timed out waiting for $file" >&2
           exit 1
         fi
-        sleep 1
+        ${pkgs.coreutils}/bin/sleep 1
       done
     }
 
     ${lib.optionalString (cfg.secrets.apiKeyFile != null) ''
       wait_secret "${cfg.secrets.apiKeyFile}"
-      export KAPSO_API_KEY="$(cat ${cfg.secrets.apiKeyFile})"
+      export KAPSO_API_KEY="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.apiKeyFile})"
     ''}
     ${lib.optionalString (cfg.secrets.phoneNumberIdFile != null) ''
       wait_secret "${cfg.secrets.phoneNumberIdFile}"
-      export KAPSO_PHONE_NUMBER_ID="$(cat ${cfg.secrets.phoneNumberIdFile})"
+      export KAPSO_PHONE_NUMBER_ID="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.phoneNumberIdFile})"
     ''}
     ${lib.optionalString (cfg.secrets.webhookVerifyTokenFile != null) ''
       wait_secret "${cfg.secrets.webhookVerifyTokenFile}"
-      export KAPSO_WEBHOOK_VERIFY_TOKEN="$(cat ${cfg.secrets.webhookVerifyTokenFile})"
+      export KAPSO_WEBHOOK_VERIFY_TOKEN="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.webhookVerifyTokenFile})"
     ''}
     ${lib.optionalString (cfg.secrets.webhookSecretFile != null) ''
       wait_secret "${cfg.secrets.webhookSecretFile}"
-      export KAPSO_WEBHOOK_SECRET="$(cat ${cfg.secrets.webhookSecretFile})"
+      export KAPSO_WEBHOOK_SECRET="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.webhookSecretFile})"
     ''}
     ${lib.optionalString (cfg.secrets.gatewayTokenFile != null) ''
       wait_secret "${cfg.secrets.gatewayTokenFile}"
-      export OPENCLAW_TOKEN="$(cat ${cfg.secrets.gatewayTokenFile})"
+      export OPENCLAW_TOKEN="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.gatewayTokenFile})"
     ''}
     ${lib.optionalString (cfg.secrets.transcribeApiKeyFile != null) ''
       wait_secret "${cfg.secrets.transcribeApiKeyFile}"
-      export KAPSO_TRANSCRIBE_API_KEY="$(cat ${cfg.secrets.transcribeApiKeyFile})"
+      export KAPSO_TRANSCRIBE_API_KEY="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.transcribeApiKeyFile})"
+    ''}
+    ${lib.optionalString (cfg.transcribe.provider == "local") ''
+      export PATH="${pkgs.ffmpeg}/bin:$PATH"
     ''}
     exec "$@"
   '';
