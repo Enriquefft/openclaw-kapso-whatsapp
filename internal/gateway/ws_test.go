@@ -236,7 +236,7 @@ type mockSigner struct {
 }
 
 func (m *mockSigner) DeviceID() string        { return m.id }
-func (m *mockSigner) PublicKeyBase64() string  { return m.pubK }
+func (m *mockSigner) PublicKeyBase64() string { return m.pubK }
 func (m *mockSigner) Sign(nonce string) (string, int64, error) {
 	m.nonce = nonce
 	return m.sig, m.ts, nil
@@ -433,5 +433,44 @@ func TestConnectWithoutSignerOmitsDevice(t *testing.T) {
 
 	if _, exists := params["device"]; exists {
 		t.Error("device field should be absent when no signer is provided")
+	}
+}
+
+// TestConnectWithSignerButNoNonceErrors verifies that when a Signer is
+// configured but the gateway challenge contains no nonce, Connect returns
+// a clear error instead of silently omitting the device field.
+func TestConnectWithSignerButNoNonceErrors(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	done := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer conn.Close()
+
+		// Send challenge without nonce.
+		challenge := ResponseFrame{Type: "event", Method: "challenge"}
+		data, _ := json.Marshal(challenge)
+		_ = conn.WriteMessage(websocket.TextMessage, data)
+
+		<-done
+	}))
+	defer srv.Close()
+	defer close(done)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	signer := &mockSigner{id: "test", pubK: "dGVzdA==", sig: "c2ln", ts: 1}
+	client := NewClient(wsURL, "test-token", signer)
+
+	err := client.Connect()
+	if err == nil {
+		client.Close()
+		t.Fatal("expected error when signer is configured but challenge has no nonce")
+	}
+
+	if !strings.Contains(err.Error(), "missing nonce") {
+		t.Errorf("error should mention missing nonce, got: %v", err)
 	}
 }

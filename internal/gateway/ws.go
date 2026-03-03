@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"runtime"
 	"sync"
 	"time"
 
@@ -135,13 +136,21 @@ func (c *Client) Connect() error {
 		} `json:"params"`
 	}
 	if err := json.Unmarshal(msg, &challenge); err != nil {
-		log.Printf("warning: failed to parse challenge frame: %v", err)
+		_ = conn.Close()
+		c.conn = nil
+		return fmt.Errorf("parse challenge frame: %w", err)
 	}
 
 	// Build device identity if a signer is configured.
 	var deviceInfo *DeviceInfo
-	if c.signer != nil && challenge.Params.Nonce != "" {
-		sig, signedAt, err := c.signer.Sign(challenge.Params.Nonce)
+	if c.signer != nil {
+		nonce := challenge.Params.Nonce
+		if nonce == "" {
+			_ = conn.Close()
+			c.conn = nil
+			return fmt.Errorf("gateway challenge missing nonce")
+		}
+		sig, signedAt, err := c.signer.Sign(nonce)
 		if err != nil {
 			_ = conn.Close()
 			c.conn = nil
@@ -152,7 +161,7 @@ func (c *Client) Connect() error {
 			PublicKey: c.signer.PublicKeyBase64(),
 			Signature: sig,
 			SignedAt:  signedAt,
-			Nonce:     challenge.Params.Nonce,
+			Nonce:     nonce,
 		}
 	}
 
@@ -168,7 +177,7 @@ func (c *Client) Connect() error {
 				ID:          "gateway-client",
 				DisplayName: "Kapso WhatsApp Bridge",
 				Version:     "0.2.0",
-				Platform:    "linux",
+				Platform:    runtime.GOOS,
 				Mode:        "backend",
 			},
 			Auth: AuthInfo{

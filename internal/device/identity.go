@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
-	"math/big"
 	"os"
 	"path/filepath"
 	"time"
@@ -93,47 +92,13 @@ func (id *Identity) PublicKeyBase64() string {
 // base64-encoded ASN.1 DER signature plus the signing timestamp (Unix ms).
 func (id *Identity) Sign(nonce string) (signature string, signedAt int64, err error) {
 	h := sha256.Sum256([]byte(nonce))
-	r, s, err := ecdsa.Sign(rand.Reader, id.key, h[:])
+	sig, err := ecdsa.SignASN1(rand.Reader, id.key, h[:])
 	if err != nil {
 		return "", 0, fmt.Errorf("sign nonce: %w", err)
 	}
 
-	// ASN.1 DER encode (r, s).
-	sig, err := asn1Signature(r, s)
-	if err != nil {
-		return "", 0, err
-	}
-
 	now := time.Now().UnixMilli()
 	return base64.StdEncoding.EncodeToString(sig), now, nil
-}
-
-// asn1Signature produces a minimal ASN.1 DER SEQUENCE of two INTEGERs.
-func asn1Signature(r, s *big.Int) ([]byte, error) {
-	rb := intBytes(r)
-	sb := intBytes(s)
-
-	// SEQUENCE { INTEGER rb, INTEGER sb }
-	inner := make([]byte, 0, 2+len(rb)+2+len(sb))
-	inner = append(inner, 0x02, byte(len(rb)))
-	inner = append(inner, rb...)
-	inner = append(inner, 0x02, byte(len(sb)))
-	inner = append(inner, sb...)
-
-	out := make([]byte, 0, 2+len(inner))
-	out = append(out, 0x30, byte(len(inner)))
-	out = append(out, inner...)
-	return out, nil
-}
-
-// intBytes returns the big-endian representation with a leading 0x00 if the
-// high bit is set (ASN.1 INTEGER is signed).
-func intBytes(v *big.Int) []byte {
-	b := v.Bytes()
-	if len(b) > 0 && b[0]&0x80 != 0 {
-		b = append([]byte{0x00}, b...)
-	}
-	return b
 }
 
 func parseKey(data []byte) (*ecdsa.PrivateKey, error) {
