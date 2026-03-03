@@ -1,0 +1,22 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15551234567",
+  "type": "interactive",
+  "interactive": {
+    "type": "list",
+    "body": { "text": "Choose your preferred delivery option:" },
+    "action": {
+      "button": "View options",
+      "sections": [
+        {
+          "title": "Delivery",
+          "rows": [
+            { "id": "standard", "title": "Standard", "description": "3-5 business days" },
+            { "id": "express", "title": "Express", "description": "1-2 business days" }
+          ]
+        }
+      ]
+    }
+  }
+}
+

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 )
 
 const baseURL = "https://api.kapso.ai/meta/whatsapp/v24.0"
@@ -26,12 +27,12 @@ func (c *Client) getBaseURL() string {
 	return baseURL
 }
 
-// NewClient creates a Kapso API client.
+// NewClient creates a Kapso API client with a 30-second HTTP timeout.
 func NewClient(apiKey, phoneNumberID string) *Client {
 	return &Client{
 		APIKey:        apiKey,
 		PhoneNumberID: phoneNumberID,
-		HTTPClient:    http.DefaultClient,
+		HTTPClient:    &http.Client{Timeout: 30 * time.Second},
 	}
 }
 

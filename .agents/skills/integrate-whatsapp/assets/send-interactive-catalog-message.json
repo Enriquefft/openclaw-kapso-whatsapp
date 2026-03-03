@@ -1,0 +1,14 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15551234567",
+  "type": "interactive",
+  "interactive": {
+    "type": "catalog_message",
+    "body": { "text": "Browse our catalog on WhatsApp." },
+    "action": {
+      "name": "catalog_message",
+      "parameters": { "thumbnail_product_retailer_id": "SKU_THUMBNAIL" }
+    }
+  }
+}
+

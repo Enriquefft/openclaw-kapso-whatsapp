@@ -15,6 +15,7 @@ const (
 	Allow Verdict = iota
 	Deny
 	RateLimited
+	Skip // Message should be skipped (e.g., no prefix in group)
 )
 
 // bucket tracks rate limit state for a single sender.
@@ -23,7 +24,7 @@ type bucket struct {
 	windowEnd time.Time
 }
 
-// Guard enforces sender allowlist, rate limiting, role resolution, and session isolation.
+// Guard enforces sender allowlist, rate limiting, role resolution, session isolation, and group support.
 type Guard struct {
 	mode        string
 	phoneTo     map[string]string // normalized phone → role
@@ -35,6 +36,9 @@ type Guard struct {
 	now         func() time.Time
 	mu          sync.Mutex
 	buckets     map[string]*bucket
+	// Group support
+	groupPrefix string
+	groupIDs    map[string]bool // set of allowed group IDs
 }
 
 // New creates a Guard from the security config. It inverts the role→[]phones
@@ -50,6 +54,11 @@ func New(cfg config.SecurityConfig) *Guard {
 		}
 	}
 
+	groupIDs := make(map[string]bool)
+	for _, id := range cfg.GroupIDs {
+		groupIDs[strings.TrimSpace(id)] = true
+	}
+
 	return &Guard{
 		mode:        cfg.Mode,
 		phoneTo:     phoneTo,
@@ -60,6 +69,8 @@ func New(cfg config.SecurityConfig) *Guard {
 		isolate:     cfg.SessionIsolation,
 		now:         time.Now,
 		buckets:     make(map[string]*bucket),
+		groupPrefix: cfg.GroupPrefix,
+		groupIDs:    groupIDs,
 	}
 }
 
@@ -138,4 +149,88 @@ func normalize(phone string) string {
 	}
 
 	return b.String()
+}
+
+// IsGroup checks if a conversation ID represents a WhatsApp group.
+// WhatsApp group IDs end with "@g.us".
+func (g *Guard) IsGroup(conversationID string) bool {
+	return strings.HasSuffix(conversationID, "@g.us")
+}
+
+// GroupPrefix returns the configured prefix for group messages.
+func (g *Guard) GroupPrefix() string {
+	return g.groupPrefix
+}
+
+// HasGroupPrefix checks if the text starts with the group prefix.
+func (g *Guard) HasGroupPrefix(text string) bool {
+	if g.groupPrefix == "" {
+		return true // No prefix required
+	}
+	return strings.HasPrefix(strings.TrimSpace(text), g.groupPrefix)
+}
+
+// StripPrefix removes the group prefix from text if present.
+func (g *Guard) StripPrefix(text string) string {
+	if g.groupPrefix == "" {
+		return text
+	}
+	text = strings.TrimSpace(text)
+	if strings.HasPrefix(text, g.groupPrefix) {
+		return strings.TrimSpace(text[len(g.groupPrefix):])
+	}
+	return text
+}
+
+// IsGroupAllowed checks if a group ID is in the allowed list.
+// If no groups are configured, all groups are allowed.
+func (g *Guard) IsGroupAllowed(groupID string) bool {
+	if len(g.groupIDs) == 0 {
+		return true // No group filter configured
+	}
+	return g.groupIDs[groupID]
+}
+
+// CheckGroup verifies if a message from a group should be processed.
+// Returns Allow if the group is allowed, user is authorized, and prefix matches.
+// Returns Skip if prefix is required but not present (silent ignore).
+// Returns Deny if group or user is not authorized.
+func (g *Guard) CheckGroup(from, groupID, text string) Verdict {
+	// Check if group is allowed
+	if !g.IsGroupAllowed(groupID) {
+		return Deny
+	}
+
+	// Check if user is authorized
+	n := normalize(from)
+	if g.mode == "allowlist" {
+		if _, ok := g.phoneTo[n]; !ok {
+			return Deny
+		}
+	}
+
+	// Check prefix
+	if !g.HasGroupPrefix(text) {
+		return Skip
+	}
+
+	// Rate limiting
+	g.mu.Lock()
+	defer g.mu.Unlock()
+
+	now := g.now()
+	b, ok := g.buckets[n]
+	if !ok || now.After(b.windowEnd) {
+		g.buckets[n] = &bucket{
+			tokens:    g.rateLimit - 1,
+			windowEnd: now.Add(g.rateWindow),
+		}
+		return Allow
+	}
+
+	if b.tokens <= 0 {
+		return RateLimited
+	}
+	b.tokens--
+	return Allow
 }

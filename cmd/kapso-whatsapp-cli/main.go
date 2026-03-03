@@ -20,6 +20,8 @@ func main() {
 	switch os.Args[1] {
 	case "send":
 		handleSend(os.Args[2:])
+	case "groups":
+		handleGroups()
 	case "status":
 		handleStatus()
 	case "preflight":
@@ -88,6 +90,74 @@ func handleSend(args []string) {
 	}
 }
 
+func handleGroups() {
+	cfg, err := config.Load()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error loading config: %v\n", err)
+		os.Exit(1)
+	}
+
+	if cfg.Kapso.APIKey == "" || cfg.Kapso.PhoneNumberID == "" {
+		fmt.Fprintln(os.Stderr, "error: KAPSO_API_KEY and KAPSO_PHONE_NUMBER_ID must be set")
+		os.Exit(1)
+	}
+
+	client := kapso.NewClient(cfg.Kapso.APIKey, cfg.Kapso.PhoneNumberID)
+	resp, err := client.ListMessages(kapso.ListMessagesParams{
+		Direction: "inbound",
+		Limit:     100,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error fetching messages: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Deduplicate: group ID → last sender name.
+	groups := make(map[string]string)
+	var order []string
+	for _, msg := range resp.Data {
+		if msg.Kapso == nil || msg.Kapso.Conversation == nil {
+			continue
+		}
+		id := msg.Kapso.Conversation.ID
+		if !strings.HasSuffix(id, "@g.us") {
+			continue
+		}
+		if _, seen := groups[id]; !seen {
+			order = append(order, id)
+		}
+		name := msg.From
+		if msg.Kapso.ContactName != "" {
+			name = msg.Kapso.ContactName
+		}
+		groups[id] = name
+	}
+
+	if len(groups) == 0 {
+		fmt.Println("No groups found in recent messages.")
+		fmt.Println("Send a message from a WhatsApp group first, then run this command again.")
+		return
+	}
+
+	fmt.Println("Groups found in recent messages:")
+	fmt.Println()
+	for _, id := range order {
+		fmt.Printf("  %s    (last message from: %s)\n", id, groups[id])
+	}
+
+	fmt.Println()
+	fmt.Println("Add these to your config.toml:")
+	fmt.Println()
+	fmt.Print("  [security]\n  group_ids = [")
+	for i, id := range order {
+		if i > 0 {
+			fmt.Print(", ")
+		}
+		fmt.Printf("%q", id)
+	}
+	fmt.Println("]")
+}
+
 func handleStatus() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -136,6 +206,7 @@ func printUsage() {
 
 Commands:
   send --to +NUMBER --text "message"   Send a text message
+  groups                                List WhatsApp group IDs from recent messages
   status                                Check webhook server health
   preflight                             Verify config, credentials, and connectivity
   help                                  Show this help

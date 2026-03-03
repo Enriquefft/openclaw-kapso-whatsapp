@@ -137,7 +137,23 @@ func main() {
 	// Consume loop — identical for all sources.
 	go func() {
 		for evt := range events {
-			verdict := guard.Check(evt.From)
+			// Check if this is a group message
+			isGroup := guard.IsGroup(evt.ConversationID)
+			var verdict security.Verdict
+			var textToSend string
+
+			if isGroup {
+				// Group message: check group permissions and prefix
+				verdict = guard.CheckGroup(evt.From, evt.ConversationID, evt.Text)
+				if verdict == security.Allow {
+					textToSend = guard.StripPrefix(evt.Text)
+				}
+			} else {
+				// 1:1 message: standard check
+				verdict = guard.Check(evt.From)
+				textToSend = evt.Text
+			}
+
 			switch verdict {
 			case security.Deny:
 				log.Printf("guard: blocked unauthorized sender %s", evt.From)
@@ -150,19 +166,35 @@ func main() {
 			case security.RateLimited:
 				log.Printf("guard: rate limited sender %s", evt.From)
 				continue
+			case security.Skip:
+				// Prefix not present in group - silent skip
+				log.Printf("guard: skipped group message (no prefix) from %s in %s", evt.From, evt.ConversationID)
+				continue
 			}
 
 			role := guard.Role(evt.From)
-			sessionKey := guard.SessionKey(cfg.Gateway.SessionKey, evt.From)
+			// For groups, use group ID in session key to share context
+			sessionKey := cfg.Gateway.SessionKey
+			if isGroup {
+				sessionKey = guard.SessionKey(cfg.Gateway.SessionKey, evt.ConversationID)
+			} else if cfg.Security.SessionIsolation {
+				sessionKey = guard.SessionKey(cfg.Gateway.SessionKey, evt.From)
+			}
 
 			// Tag message with sender info and role.
-			taggedText := fmt.Sprintf("From: %s (%s) [role: %s]\n%s", evt.From, evt.Name, role, evt.Text)
+			var taggedText string
+			if isGroup {
+				taggedText = fmt.Sprintf("From: %s (%s) [role: %s] [group: %s]\n%s", evt.From, evt.Name, role, evt.ConversationID, textToSend)
+			} else {
+				taggedText = fmt.Sprintf("From: %s (%s) [role: %s]\n%s", evt.From, evt.Name, role, textToSend)
+			}
 
 			if err := gw.Send(sessionKey, evt.ID, taggedText); err != nil {
 				log.Printf("error forwarding message %s: %v", evt.ID, err)
 				continue
 			}
 			log.Printf("forwarded message %s from %s [role: %s, session: %s]", evt.ID, evt.From, role, sessionKey)
+
 			go rel.Send(ctx, evt.From, evt.ID, sessionKey, time.Now().UTC())
 		}
 	}()

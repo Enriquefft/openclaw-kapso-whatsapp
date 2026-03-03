@@ -28,8 +28,11 @@ let
       rate_window = cfg.security.rateWindow;
       session_isolation = cfg.security.sessionIsolation;
       default_role = cfg.security.defaultRole;
+      group_prefix = cfg.security.groupPrefix;
     } // lib.optionalAttrs (cfg.security.roles != {}) {
       roles = cfg.security.roles;
+    } // lib.optionalAttrs (cfg.security.groupIds != []) {
+      group_ids = cfg.security.groupIds;
     };
   } // lib.optionalAttrs (cfg.transcribe.provider != "") {
     transcribe = {
@@ -205,6 +208,20 @@ in {
         type = types.str;
         default = "member";
         description = "Role assigned to senders not in the roles map (used in 'open' mode).";
+      };
+
+      groupPrefix = mkOption {
+        type = types.str;
+        default = "";
+        example = "!claw";
+        description = "Prefix required to trigger bot in WhatsApp groups. Empty = no prefix required.";
+      };
+
+      groupIds = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        example = [ "120363xxx@g.us" "120363yyy@g.us" ];
+        description = "List of allowed WhatsApp group IDs. Empty = all groups allowed.";
       };
     };
 

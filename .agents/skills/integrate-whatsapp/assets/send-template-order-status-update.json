@@ -1,0 +1,32 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15551234567",
+  "type": "template",
+  "template": {
+    "name": "order_status_update",
+    "language": { "code": "en_US" },
+    "components": [
+      {
+        "type": "header",
+        "parameters": [
+          { "type": "text", "parameter_name": "order_id", "text": "ORDER-123" }
+        ]
+      },
+      {
+        "type": "body",
+        "parameters": [
+          { "type": "text", "parameter_name": "customer_name", "text": "Alex" },
+          { "type": "text", "parameter_name": "status", "text": "shipped" },
+          { "type": "text", "parameter_name": "details", "text": "Expected delivery: Jan 25" }
+        ]
+      },
+      {
+        "type": "button",
+        "sub_type": "url",
+        "index": "0",
+        "parameters": [{ "type": "text", "text": "ORDER-123" }]
+      }
+    ]
+  }
+}
+

@@ -1,0 +1,25 @@
+{
+  "name": "product_launch_image",
+  "language": "en_US",
+  "category": "MARKETING",
+  "parameter_format": "NAMED",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "IMAGE",
+      "example": {
+        "header_handle": ["HEADER_HANDLE_PLACEHOLDER"]
+      }
+    },
+    {
+      "type": "BODY",
+      "text": "Hi {{first_name}}, meet the new release.",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "first_name", "example": "Jordan" }
+        ]
+      }
+    }
+  ]
+}
+

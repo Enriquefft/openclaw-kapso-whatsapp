@@ -1,0 +1,12 @@
+{
+  "url": "https://example.com/webhooks/kapso",
+  "events": ["whatsapp.message.received", "whatsapp.message.failed"],
+  "payload_version": "v2",
+  "active": true,
+  "headers": {
+    "X-Custom-Header": "my-value"
+  },
+  "buffer_enabled": true,
+  "buffer_window_seconds": 5,
+  "max_buffer_size": 10
+}

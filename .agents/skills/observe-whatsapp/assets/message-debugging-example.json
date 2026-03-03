@@ -1,0 +1,8 @@
+{
+  "message_id": "wamid.HBgMMTIzNDU2Nzg5",
+  "timeline": [
+    { "status": "sent", "at": "2025-07-16T09:40:00Z" },
+    { "status": "delivered", "at": "2025-07-16T09:40:05Z" },
+    { "status": "read", "at": "2025-07-16T09:41:12Z" }
+  ]
+}

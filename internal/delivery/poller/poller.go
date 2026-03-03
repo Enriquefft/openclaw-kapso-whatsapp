@@ -85,11 +85,18 @@ func (p *Poller) poll(lastPoll *time.Time, out chan<- delivery.Event) {
 			name = msg.Kapso.ContactName
 		}
 
+		// Extract conversation ID for group detection
+		conversationID := ""
+		if msg.Kapso != nil && msg.Kapso.Conversation != nil {
+			conversationID = msg.Kapso.Conversation.ID
+		}
+
 		out <- delivery.Event{
-			ID:   msg.ID,
-			From: msg.From,
-			Name: name,
-			Text: text,
+			ID:             msg.ID,
+			From:           msg.From,
+			Name:           name,
+			Text:           text,
+			ConversationID: conversationID,
 		}
 		forwarded++
 

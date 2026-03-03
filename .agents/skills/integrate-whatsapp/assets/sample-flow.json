@@ -1,0 +1,33 @@
+{
+  "version": "7.3",
+  "screens": [
+    {
+      "id": "WELCOME",
+      "terminal": true,
+      "title": "Quick signup",
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "Tell us your name to get started."
+          },
+          {
+            "type": "TextInput",
+            "name": "full_name",
+            "label": "Full name",
+            "required": true
+          },
+          {
+            "type": "Footer",
+            "label": "Submit",
+            "on-click-action": {
+              "name": "complete",
+              "payload": {}
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

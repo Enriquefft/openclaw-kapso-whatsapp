@@ -1,0 +1,45 @@
+{
+  "name": "order_ready_named",
+  "language": "en_US",
+  "category": "UTILITY",
+  "parameter_format": "NAMED",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "TEXT",
+      "text": "Order {{order_id}} is ready",
+      "example": {
+        "header_text_named_params": [
+          { "param_name": "order_id", "example": "ORDER-123" }
+        ]
+      }
+    },
+    {
+      "type": "BODY",
+      "text": "Hi {{customer_name}}, your total is {{amount}}.",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "customer_name", "example": "Alex" },
+          { "param_name": "amount", "example": "$42.00" }
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Reply STOP to opt out"
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        { "type": "QUICK_REPLY", "text": "Need help" },
+        {
+          "type": "URL",
+          "text": "Track order",
+          "url": "https://example.com/track?id={{1}}",
+          "example": ["https://example.com/track?id=ORDER-123"]
+        }
+      ]
+    }
+  ]
+}
+

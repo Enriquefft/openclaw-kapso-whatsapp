@@ -1,0 +1,45 @@
+{
+  "name": "order_status_update",
+  "language": "en_US",
+  "category": "UTILITY",
+  "parameter_format": "NAMED",
+  "components": [
+    {
+      "type": "HEADER",
+      "format": "TEXT",
+      "text": "Order {{order_id}} update",
+      "example": {
+        "header_text_named_params": [
+          { "param_name": "order_id", "example": "ORDER-123" }
+        ]
+      }
+    },
+    {
+      "type": "BODY",
+      "text": "Hi {{customer_name}}, your order is {{status}}. {{details}}",
+      "example": {
+        "body_text_named_params": [
+          { "param_name": "customer_name", "example": "Alex" },
+          { "param_name": "status", "example": "shipped" },
+          { "param_name": "details", "example": "Expected delivery: Jan 25" }
+        ]
+      }
+    },
+    {
+      "type": "FOOTER",
+      "text": "Reply STOP to opt out"
+    },
+    {
+      "type": "BUTTONS",
+      "buttons": [
+        {
+          "type": "URL",
+          "text": "Track order",
+          "url": "https://example.com/orders/{{1}}",
+          "example": ["https://example.com/orders/ORDER-123"]
+        }
+      ]
+    }
+  ]
+}
+

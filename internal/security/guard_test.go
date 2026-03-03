@@ -164,3 +164,91 @@ func TestDenyMessage(t *testing.T) {
 		t.Fatalf("expected 'denied', got %q", g.DenyMessage())
 	}
 }
+
+func testGroupCfg() config.SecurityConfig {
+	cfg := testCfg()
+	cfg.GroupPrefix = "!claw"
+	cfg.GroupIDs = []string{"120363001@g.us", "120363002@g.us"}
+	return cfg
+}
+
+func TestIsGroup(t *testing.T) {
+	g := New(testCfg())
+	if !g.IsGroup("120363001@g.us") {
+		t.Fatal("expected @g.us suffix to be detected as group")
+	}
+	if g.IsGroup("+15551234567") {
+		t.Fatal("expected phone number to not be detected as group")
+	}
+	if g.IsGroup("") {
+		t.Fatal("expected empty string to not be detected as group")
+	}
+}
+
+func TestCheckGroupAllowedWithPrefix(t *testing.T) {
+	g := New(testGroupCfg())
+	v := g.CheckGroup("+1234567890", "120363001@g.us", "!claw what is the weather?")
+	if v != Allow {
+		t.Fatalf("expected Allow, got %d", v)
+	}
+	stripped := g.StripPrefix("!claw what is the weather?")
+	if stripped != "what is the weather?" {
+		t.Fatalf("expected stripped text, got %q", stripped)
+	}
+}
+
+func TestCheckGroupDenyUnauthorized(t *testing.T) {
+	g := New(testGroupCfg())
+	v := g.CheckGroup("+9999999999", "120363001@g.us", "!claw hello")
+	if v != Deny {
+		t.Fatalf("expected Deny for unknown sender, got %d", v)
+	}
+}
+
+func TestCheckGroupSkipNoPrefix(t *testing.T) {
+	g := New(testGroupCfg())
+	v := g.CheckGroup("+1234567890", "120363001@g.us", "just a normal message")
+	if v != Skip {
+		t.Fatalf("expected Skip when prefix missing, got %d", v)
+	}
+}
+
+func TestCheckGroupDenyUnknownGroup(t *testing.T) {
+	g := New(testGroupCfg())
+	v := g.CheckGroup("+1234567890", "999999999@g.us", "!claw hello")
+	if v != Deny {
+		t.Fatalf("expected Deny for unknown group, got %d", v)
+	}
+}
+
+func TestCheckGroupOpenModeNoPrefix(t *testing.T) {
+	cfg := testGroupCfg()
+	cfg.Mode = "open"
+	cfg.GroupPrefix = ""
+	cfg.GroupIDs = nil
+	g := New(cfg)
+
+	v := g.CheckGroup("+9999999999", "120363999@g.us", "hello everyone")
+	if v != Allow {
+		t.Fatalf("expected Allow in open mode with no prefix, got %d", v)
+	}
+}
+
+func TestStripPrefix(t *testing.T) {
+	g := New(testGroupCfg())
+
+	tests := []struct {
+		input, want string
+	}{
+		{"!claw what is this?", "what is this?"},
+		{"  !claw  spaced  ", "spaced"},
+		{"no prefix here", "no prefix here"},
+		{"!claw", ""},
+	}
+	for _, tt := range tests {
+		got := g.StripPrefix(tt.input)
+		if got != tt.want {
+			t.Errorf("StripPrefix(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}

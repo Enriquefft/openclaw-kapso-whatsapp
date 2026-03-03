@@ -72,6 +72,9 @@ type SecurityConfig struct {
 	RateWindow       int                 `toml:"rate_window"`
 	SessionIsolation bool                `toml:"session_isolation"`
 	DefaultRole      string              `toml:"default_role"`
+	// Group support
+	GroupPrefix string   `toml:"group_prefix"` // Prefix required to trigger bot in groups (e.g., "!claw")
+	GroupIDs    []string `toml:"group_ids"`    // Allowed group IDs (e.g., ["120363xxx@g.us"])
 }
 
 func defaults() Config {
@@ -229,6 +232,21 @@ func applyEnv(cfg *Config) {
 			// Only add if not already present in any TOML role.
 			if !phoneInRoles(cfg.Security.Roles, n) {
 				cfg.Security.Roles[role] = append(cfg.Security.Roles[role], n)
+			}
+		}
+	}
+
+	// Group support overrides.
+	if v := os.Getenv("KAPSO_GROUP_PREFIX"); v != "" {
+		cfg.Security.GroupPrefix = v
+	}
+	if v := os.Getenv("KAPSO_GROUP_IDS"); v != "" {
+		// Comma-separated group IDs (e.g., "120363xxx@g.us,120363yyy@g.us")
+		ids := strings.Split(v, ",")
+		for _, id := range ids {
+			id = strings.TrimSpace(id)
+			if id != "" {
+				cfg.Security.GroupIDs = append(cfg.Security.GroupIDs, id)
 			}
 		}
 	}

@@ -1,0 +1,17 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15551234567",
+  "type": "interactive",
+  "interactive": {
+    "type": "cta_url",
+    "body": { "text": "Track your order:" },
+    "action": {
+      "name": "cta_url",
+      "parameters": {
+        "display_text": "Track order",
+        "url": "https://example.com/orders/ORDER-123"
+      }
+    }
+  }
+}
+

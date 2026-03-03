@@ -1,0 +1,11 @@
+{
+  "errors": [
+    {
+      "source": "webhook_delivery",
+      "event": "whatsapp.message.received",
+      "status": "failed",
+      "error": "Connection refused",
+      "last_attempt_at": "2025-07-16T10:05:00Z"
+    }
+  ]
+}

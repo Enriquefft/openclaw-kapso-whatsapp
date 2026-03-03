@@ -1,0 +1,16 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15551234567",
+  "type": "interactive",
+  "interactive": {
+    "type": "button",
+    "body": { "text": "Choose an option:" },
+    "action": {
+      "buttons": [
+        { "type": "reply", "reply": { "id": "accept", "title": "Accept" } },
+        { "type": "reply", "reply": { "id": "decline", "title": "Decline" } }
+      ]
+    }
+  }
+}
+

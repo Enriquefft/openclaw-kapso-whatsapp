@@ -1,0 +1,11 @@
+{
+  "status": "degraded",
+  "checked_at": "2025-07-16T10:15:00Z",
+  "checks": {
+    "phone_number_access": { "passed": true },
+    "token_validity": { "passed": true },
+    "messaging_health": { "overall_status": "LIMITED" },
+    "webhook_verified": { "passed": false },
+    "webhook_subscription": { "passed": true }
+  }
+}

@@ -1,0 +1,106 @@
+{
+  "version": "7.3",
+  "data_api_version": "3.0",
+  "routing_model": {
+    "SELECT_DATE": ["SELECT_SLOT", "SUCCESS"],
+    "SELECT_SLOT": ["SUCCESS"]
+  },
+  "screens": [
+    {
+      "id": "SELECT_DATE",
+      "title": "Book appointment",
+      "data": {
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "Select a date for your appointment."
+          },
+          {
+            "type": "DatePicker",
+            "name": "date",
+            "label": "Date",
+            "on-select-action": {
+              "name": "data_exchange",
+              "payload": {
+                "date": "${form.date}"
+              }
+            }
+          },
+          {
+            "type": "Footer",
+            "label": "Continue",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "date": "${form.date}"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "id": "SELECT_SLOT",
+      "title": "Select time",
+      "data": {
+        "selected_date": {
+          "type": "string",
+          "__example__": "2025-01-15"
+        },
+        "available_slots": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "title": { "type": "string" }
+            }
+          },
+          "__example__": [
+            { "id": "09:00", "title": "9:00 AM" },
+            { "id": "10:00", "title": "10:00 AM" }
+          ]
+        },
+        "error_message": {
+          "type": "string",
+          "__example__": ""
+        }
+      },
+      "terminal": true,
+      "layout": {
+        "type": "SingleColumnLayout",
+        "children": [
+          {
+            "type": "TextBody",
+            "text": "Available times for ${data.selected_date}:"
+          },
+          {
+            "type": "RadioButtonsGroup",
+            "name": "slot",
+            "label": "Time slot",
+            "data-source": "${data.available_slots}",
+            "required": true
+          },
+          {
+            "type": "Footer",
+            "label": "Book",
+            "on-click-action": {
+              "name": "data_exchange",
+              "payload": {
+                "date": "${data.selected_date}",
+                "slot": "${form.slot}"
+              }
+            }
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "messaging_product": "whatsapp",
+  "to": "15551234567",
+  "type": "interactive",
+  "interactive": {
+    "type": "location_request_message",
+    "body": { "text": "Please share your location." },
+    "action": { "name": "send_location" }
+  }
+}
+

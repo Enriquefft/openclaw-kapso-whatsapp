@@ -192,7 +192,7 @@ func (s *Server) handleMetaPayload(body []byte, out chan<- delivery.Event) {
 			}
 
 			for _, msg := range change.Value.Messages {
-				s.emitMessage(msg, contacts, out)
+				s.emitMessage(msg, contacts, nil, out)
 			}
 		}
 	}
@@ -213,13 +213,13 @@ func (s *Server) handleKapsoPayload(body []byte, out chan<- delivery.Event) {
 	}
 
 	for _, item := range payload.Data {
-		s.emitMessage(item.Message, nil, out)
+		s.emitMessage(item.Message, nil, item.Conversation, out)
 	}
 }
 
 // emitMessage extracts text from a message and emits it as a delivery.Event.
 // contacts is an optional Meta-format contact-name lookup (nil for Kapso native).
-func (s *Server) emitMessage(msg kapso.Message, contacts map[string]string, out chan<- delivery.Event) {
+func (s *Server) emitMessage(msg kapso.Message, contacts map[string]string, eventConversation *kapso.KapsoConversation, out chan<- delivery.Event) {
 	text, ok := delivery.ExtractText(msg, s.Client, s.Transcriber, s.MaxAudioSize)
 	if !ok {
 		return
@@ -232,11 +232,22 @@ func (s *Server) emitMessage(msg kapso.Message, contacts map[string]string, out 
 		name = contacts[msg.From]
 	}
 
+	// Extract conversation ID for group detection.
+	// Prefer message-level kapso.conversation; fall back to event-level conversation
+	// (Kapso-native webhooks carry conversation as a sibling of the message).
+	conversationID := ""
+	if msg.Kapso != nil && msg.Kapso.Conversation != nil {
+		conversationID = msg.Kapso.Conversation.ID
+	} else if eventConversation != nil {
+		conversationID = eventConversation.ID
+	}
+
 	out <- delivery.Event{
-		ID:   msg.ID,
-		From: msg.From,
-		Name: name,
-		Text: text,
+		ID:             msg.ID,
+		From:           msg.From,
+		Name:           name,
+		Text:           text,
+		ConversationID: conversationID,
 	}
 	log.Printf("webhook: received message %s from %s", msg.ID, msg.From)
 }

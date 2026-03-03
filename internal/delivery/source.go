@@ -6,10 +6,11 @@ import (
 
 // Event represents a single inbound message ready for the gateway.
 type Event struct {
-	ID   string // Kapso message ID (idempotency key)
-	From string // sender phone
-	Name string // contact display name
-	Text string // extracted, gateway-ready text
+	ID             string // Kapso message ID (idempotency key)
+	From           string // sender phone
+	Name           string // contact display name
+	Text           string // extracted, gateway-ready text
+	ConversationID string // conversation ID (group ID for groups, empty for 1:1)
 }
 
 // Source produces inbound message events from a delivery channel (poller, webhook, etc.).

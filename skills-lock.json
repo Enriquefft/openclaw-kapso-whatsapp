@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "integrate-whatsapp": {
+      "source": "gokapso/agent-skills",
+      "sourceType": "github",
+      "computedHash": "2614f0fef9fbcd1834c06010d563c4fd6d4232016820ca61d28520b26925c245"
+    },
+    "observe-whatsapp": {
+      "source": "gokapso/agent-skills",
+      "sourceType": "github",
+      "computedHash": "b5a3ef10ef706037657eb99c234f8bd0bd5ab6843a814a8caaa36f7c3658b7ed"
+    }
+  }
+}

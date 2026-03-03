@@ -86,13 +86,14 @@ type Message struct {
 // KapsoMeta contains Kapso-enhanced metadata present in both polling and
 // webhook message payloads.
 type KapsoMeta struct {
-	Direction   string      `json:"direction"`
-	Status      string      `json:"status"`
-	ContactName string      `json:"contact_name"`
-	HasMedia    bool        `json:"has_media,omitempty"`
-	MediaURL    string      `json:"media_url,omitempty"`
-	MediaData   *MediaData  `json:"media_data,omitempty"`
-	Transcript  *Transcript `json:"transcript,omitempty"`
+	Direction    string             `json:"direction"`
+	Status       string             `json:"status"`
+	ContactName  string             `json:"contact_name"`
+	HasMedia     bool               `json:"has_media,omitempty"`
+	MediaURL     string             `json:"media_url,omitempty"`
+	MediaData    *MediaData         `json:"media_data,omitempty"`
+	Transcript   *Transcript        `json:"transcript,omitempty"`
+	Conversation *KapsoConversation `json:"conversation,omitempty"`
 }
 
 // MediaData contains media attachment details from the Kapso API.
