@@ -19,6 +19,8 @@ builds:
     binary: kapso-whatsapp-bridge
     env:
       - CGO_ENABLED=0
+    ldflags:
+      - -s -w -X github.com/Enriquefft/openclaw-kapso-whatsapp/internal/gateway.Version={{.Version}}
     goos:
       - linux
       - darwin

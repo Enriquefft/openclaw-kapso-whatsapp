@@ -78,6 +78,10 @@ type ChatSendParams struct {
 	IdempotencyKey string `json:"idempotencyKey"`
 }
 
+// Version is the bridge version sent in the connect handshake.
+// Overridden at build time via -ldflags.
+var Version = "dev"
+
 // Client manages a WebSocket connection to the OpenClaw gateway.
 type Client struct {
 	url    string
@@ -176,7 +180,7 @@ func (c *Client) Connect() error {
 			Client: ClientInfo{
 				ID:          "gateway-client",
 				DisplayName: "Kapso WhatsApp Bridge",
-				Version:     "0.2.0",
+				Version:     Version,
 				Platform:    runtime.GOOS,
 				Mode:        "backend",
 			},
