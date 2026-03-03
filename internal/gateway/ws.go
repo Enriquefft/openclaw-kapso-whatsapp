@@ -134,7 +134,9 @@ func (c *Client) Connect() error {
 			Nonce string `json:"nonce"`
 		} `json:"params"`
 	}
-	_ = json.Unmarshal(msg, &challenge)
+	if err := json.Unmarshal(msg, &challenge); err != nil {
+		log.Printf("warning: failed to parse challenge frame: %v", err)
+	}
 
 	// Build device identity if a signer is configured.
 	var deviceInfo *DeviceInfo

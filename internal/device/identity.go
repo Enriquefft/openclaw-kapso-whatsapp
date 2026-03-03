@@ -21,7 +21,8 @@ const keyFile = "device-key.pem"
 // Identity holds a persistent ECDSA P-256 keypair used to prove device
 // identity to the OpenClaw gateway.
 type Identity struct {
-	key *ecdsa.PrivateKey
+	key    *ecdsa.PrivateKey
+	pubDER []byte // pre-computed DER-encoded public key
 }
 
 // LoadOrCreate reads an existing device key from dir, or generates a new
@@ -35,7 +36,7 @@ func LoadOrCreate(dir string) (*Identity, error) {
 		if parseErr != nil {
 			return nil, fmt.Errorf("parse device key %s: %w", path, parseErr)
 		}
-		return &Identity{key: key}, nil
+		return newIdentity(key)
 	}
 
 	if !os.IsNotExist(err) {
@@ -66,20 +67,26 @@ func LoadOrCreate(dir string) (*Identity, error) {
 		return nil, fmt.Errorf("write device key %s: %w", path, err)
 	}
 
-	return &Identity{key: key}, nil
+	return newIdentity(key)
+}
+
+func newIdentity(key *ecdsa.PrivateKey) (*Identity, error) {
+	pub, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
+	if err != nil {
+		return nil, fmt.Errorf("marshal public key: %w", err)
+	}
+	return &Identity{key: key, pubDER: pub}, nil
 }
 
 // DeviceID returns a hex-encoded SHA-256 fingerprint of the public key.
 func (id *Identity) DeviceID() string {
-	pub, _ := x509.MarshalPKIXPublicKey(&id.key.PublicKey)
-	h := sha256.Sum256(pub)
+	h := sha256.Sum256(id.pubDER)
 	return hex.EncodeToString(h[:])
 }
 
 // PublicKeyBase64 returns the base64-encoded DER public key.
 func (id *Identity) PublicKeyBase64() string {
-	pub, _ := x509.MarshalPKIXPublicKey(&id.key.PublicKey)
-	return base64.StdEncoding.EncodeToString(pub)
+	return base64.StdEncoding.EncodeToString(id.pubDER)
 }
 
 // Sign signs the given nonce with the device private key and returns the
