@@ -30,12 +30,29 @@ type ResponseFrame struct {
 
 // ConnectParams is the params for the connect request.
 type ConnectParams struct {
-	MinProtocol int        `json:"minProtocol"`
-	MaxProtocol int        `json:"maxProtocol"`
-	Client      ClientInfo `json:"client"`
-	Auth        AuthInfo   `json:"auth"`
-	Role        string     `json:"role"`
-	Scopes      []string   `json:"scopes"`
+	MinProtocol int         `json:"minProtocol"`
+	MaxProtocol int         `json:"maxProtocol"`
+	Client      ClientInfo  `json:"client"`
+	Auth        AuthInfo    `json:"auth"`
+	Device      *DeviceInfo `json:"device,omitempty"`
+	Role        string      `json:"role"`
+	Scopes      []string    `json:"scopes"`
+}
+
+// DeviceInfo identifies this device to the gateway via a signed challenge.
+type DeviceInfo struct {
+	ID        string `json:"id"`
+	PublicKey string `json:"publicKey"`
+	Signature string `json:"signature"`
+	SignedAt  int64  `json:"signedAt"`
+	Nonce     string `json:"nonce"`
+}
+
+// Signer provides device identity for the gateway connect handshake.
+type Signer interface {
+	DeviceID() string
+	PublicKeyBase64() string
+	Sign(nonce string) (signature string, signedAt int64, err error)
 }
 
 // ClientInfo identifies this client to the gateway.
@@ -62,18 +79,21 @@ type ChatSendParams struct {
 
 // Client manages a WebSocket connection to the OpenClaw gateway.
 type Client struct {
-	url   string
-	token string
-	conn  *websocket.Conn
-	mu    sync.Mutex
-	seq   int
+	url    string
+	token  string
+	signer Signer
+	conn   *websocket.Conn
+	mu     sync.Mutex
+	seq    int
 }
 
-// NewClient creates a new gateway WebSocket client.
-func NewClient(url, token string) *Client {
+// NewClient creates a new gateway WebSocket client. The signer provides device
+// identity for the connect handshake; pass nil to connect without device identity.
+func NewClient(url, token string, signer Signer) *Client {
 	return &Client{
-		url:   url,
-		token: token,
+		url:    url,
+		token:  token,
+		signer: signer,
 	}
 }
 
@@ -108,6 +128,32 @@ func (c *Client) Connect() error {
 
 	log.Printf("received challenge from gateway: %s", string(msg))
 
+	// Parse challenge to extract nonce for device signing.
+	var challenge struct {
+		Params struct {
+			Nonce string `json:"nonce"`
+		} `json:"params"`
+	}
+	_ = json.Unmarshal(msg, &challenge)
+
+	// Build device identity if a signer is configured.
+	var deviceInfo *DeviceInfo
+	if c.signer != nil && challenge.Params.Nonce != "" {
+		sig, signedAt, err := c.signer.Sign(challenge.Params.Nonce)
+		if err != nil {
+			_ = conn.Close()
+			c.conn = nil
+			return fmt.Errorf("sign challenge nonce: %w", err)
+		}
+		deviceInfo = &DeviceInfo{
+			ID:        c.signer.DeviceID(),
+			PublicKey: c.signer.PublicKeyBase64(),
+			Signature: sig,
+			SignedAt:  signedAt,
+			Nonce:     challenge.Params.Nonce,
+		}
+	}
+
 	// Send connect request.
 	connectReq := RequestFrame{
 		Type:   "req",
@@ -126,6 +172,7 @@ func (c *Client) Connect() error {
 			Auth: AuthInfo{
 				Token: c.token,
 			},
+			Device: deviceInfo,
 			Role:   "operator",
 			Scopes: []string{"operator.read", "operator.write"},
 		},
