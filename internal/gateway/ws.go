@@ -127,7 +127,7 @@ func (c *Client) Connect() error {
 				Token: c.token,
 			},
 			Role:   "operator",
-			Scopes: []string{"operator.admin"},
+			Scopes: []string{"operator.read", "operator.write"},
 		},
 	}
 
