@@ -76,7 +76,7 @@ func (r *Relay) Send(ctx context.Context, from, messageID, sessionKey string, si
 		log.Printf("relay: failed to mark read with typing for %s: %v", messageID, err)
 	}
 
-	deadline := time.Now().Add(3 * time.Minute)
+	deadline := time.Now().Add(10 * time.Minute)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
