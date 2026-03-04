@@ -81,7 +81,7 @@ let
     ''}
     ${lib.optionalString (cfg.secrets.gatewayTokenFile != null) ''
       wait_secret "${cfg.secrets.gatewayTokenFile}"
-      export OPENCLAW_TOKEN="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.gatewayTokenFile})"
+      export GATEWAY_TOKEN="$(${pkgs.coreutils}/bin/cat ${cfg.secrets.gatewayTokenFile})"
     ''}
     ${lib.optionalString (cfg.secrets.transcribeApiKeyFile != null) ''
       wait_secret "${cfg.secrets.transcribeApiKeyFile}"

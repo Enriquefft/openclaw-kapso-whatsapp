@@ -181,7 +181,13 @@ func applyEnv(cfg *Config) {
 	if v := os.Getenv("OPENCLAW_GATEWAY_URL"); v != "" {
 		cfg.Gateway.URL = v
 	}
+	if v := os.Getenv("GATEWAY_URL"); v != "" {
+		cfg.Gateway.URL = v
+	}
 	if v := os.Getenv("OPENCLAW_TOKEN"); v != "" {
+		cfg.Gateway.Token = v
+	}
+	if v := os.Getenv("GATEWAY_TOKEN"); v != "" {
 		cfg.Gateway.Token = v
 	}
 	if v := os.Getenv("OPENCLAW_SESSION_KEY"); v != "" {
