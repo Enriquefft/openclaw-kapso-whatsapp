@@ -45,6 +45,12 @@ let
       cache_ttl           = cfg.transcribe.cacheTTL;
       debug               = cfg.transcribe.debug;
     };
+  } // lib.optionalAttrs (cfg.commands.definitions != {}) {
+    commands = {
+      prefix      = cfg.commands.prefix;
+      timeout     = cfg.commands.timeout;
+      definitions = cfg.commands.definitions;
+    };
   });
 
   # Script that reads secret files and exports them as env vars before exec.
@@ -277,6 +283,62 @@ in {
         type = types.bool;
         default = false;
         description = "Enable debug logging for transcription.";
+      };
+    };
+
+    commands = {
+      prefix = mkOption {
+        type = types.str;
+        default = "!";
+        description = ''
+          Command prefix character. Commands sent from WhatsApp must start with this prefix.
+          For ZeroClaw deployments, keep the default "!" — ZeroClaw intercepts "/" natively
+          (for /new, /models, /approve etc.) so bridge commands with that prefix would never fire.
+        '';
+      };
+
+      timeout = mkOption {
+        type = types.int;
+        default = 30;
+        description = "Timeout in seconds for shell-type command execution.";
+      };
+
+      definitions = mkOption {
+        type = types.attrsOf (types.submodule {
+          options = {
+            type = mkOption {
+              type = types.enum [ "shell" "agent" ];
+              description = "Command type: 'shell' runs a system command, 'agent' sends a prompt to the gateway.";
+            };
+            description = mkOption {
+              type = types.str;
+              default = "";
+              description = "Human-readable description shown in !help output.";
+            };
+            shell = mkOption {
+              type = types.str;
+              default = "";
+              description = "Shell command to run (shell type). Use {args} or $ARGS for user-supplied arguments.";
+            };
+            prompt = mkOption {
+              type = types.str;
+              default = "";
+              description = "Prompt template sent to the agent (agent type). Use {args} for user-supplied arguments.";
+            };
+            ack = mkOption {
+              type = types.str;
+              default = "";
+              description = "Optional acknowledgment message sent before execution. Useful for slow or self-terminating commands.";
+            };
+            roles = mkOption {
+              type = types.listOf types.str;
+              default = [];
+              description = "Roles allowed to run this command. Empty list means all roles.";
+            };
+          };
+        });
+        default = {};
+        description = "Command definitions. Each attribute name becomes the command name (e.g. 'reload' → '!reload').";
       };
     };
 

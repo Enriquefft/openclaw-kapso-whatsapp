@@ -19,6 +19,26 @@ type Config struct {
 	State      StateConfig      `toml:"state"`
 	Security   SecurityConfig   `toml:"security"`
 	Transcribe TranscribeConfig `toml:"transcribe"`
+	Commands   CommandsConfig   `toml:"commands"`
+}
+
+// CommandsConfig holds configuration for the bridge-level command system.
+// Commands are intercepted before the gateway and executed directly by the bridge.
+// The system is dormant when Definitions is empty.
+type CommandsConfig struct {
+	Prefix      string                `toml:"prefix"`      // command prefix char, defaults to "!"
+	Timeout     int                   `toml:"timeout"`     // shell command timeout in seconds
+	Definitions map[string]CommandDef `toml:"definitions"` // name → definition
+}
+
+// CommandDef defines a single bridge command.
+type CommandDef struct {
+	Type        string   `toml:"type"`        // "shell" or "agent"
+	Description string   `toml:"description"` // shown in !help
+	Shell       string   `toml:"shell"`       // shell type: command to run; {args} and $ARGS available
+	Prompt      string   `toml:"prompt"`      // agent type: prompt template with {args} placeholder
+	Ack         string   `toml:"ack"`         // optional message sent before execution (shell type)
+	Roles       []string `toml:"roles"`       // roles allowed to run; empty = all roles
 }
 
 // TranscribeConfig holds configuration for audio transcription providers.
@@ -354,6 +374,16 @@ func (c *Config) Validate() error {
 	}
 	if c.Transcribe.CacheTTL <= 0 {
 		c.Transcribe.CacheTTL = 3600
+	}
+
+	// Commands validation.
+	if len(c.Commands.Definitions) > 0 {
+		if c.Commands.Prefix == "" {
+			c.Commands.Prefix = "!"
+		}
+		if c.Commands.Timeout <= 0 {
+			c.Commands.Timeout = 30
+		}
 	}
 
 	return nil

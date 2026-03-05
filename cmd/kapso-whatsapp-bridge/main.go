@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/commands"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/poller"
@@ -134,6 +136,12 @@ func main() {
 		cfg.Security.Mode, cfg.Security.SessionIsolation,
 		cfg.Security.RateLimit, cfg.Security.RateWindow)
 
+	// Command dispatcher (no-op when no commands are configured).
+	dispatcher := commands.New(cfg.Commands)
+	if cfg.Commands.Prefix != "" && len(cfg.Commands.Definitions) > 0 {
+		log.Printf("commands: prefix=%q, %d command(s) configured", cfg.Commands.Prefix, len(cfg.Commands.Definitions))
+	}
+
 	// Consume loop — identical for all sources.
 	go func() {
 		for evt := range events {
@@ -155,6 +163,12 @@ func main() {
 			role := guard.Role(evt.From)
 			sessionKey := guard.SessionKey(cfg.Gateway.SessionKey, evt.From)
 
+			// Bridge commands are intercepted before the gateway.
+			if dispatcher.IsCommand(evt.Text) {
+				go handleCommand(ctx, dispatcher, gw, client, evt, sessionKey, role)
+				continue
+			}
+
 			// Forward to gateway and wait for agent reply in a goroutine.
 			go handleMessage(ctx, gw, client, evt, sessionKey, role)
 		}
@@ -165,6 +179,75 @@ func main() {
 	log.Printf("received %s, shutting down", sig)
 	cancel()
 	cleanupFunnel(funnelProc)
+}
+
+// handleCommand dispatches a bridge-level command and sends the reply to WhatsApp.
+// Commands are executed without involving the AI gateway (except agent-type commands).
+func handleCommand(ctx context.Context, d *commands.Dispatcher, gw gateway.Gateway, client *kapso.Client, evt delivery.Event, sessionKey, role string) {
+	from := evt.From
+	if !strings.HasPrefix(from, "+") {
+		from = "+" + from
+	}
+
+	if err := client.MarkReadWithTyping(evt.ID); err != nil {
+		log.Printf("command: failed to mark read for %s: %v", evt.ID, err)
+	}
+
+	name, args, ok := d.Parse(evt.Text)
+	if !ok {
+		msg := fmt.Sprintf("Unknown command. Send %shelp for available commands.", d.Prefix())
+		if _, err := client.SendText(from, msg); err != nil {
+			log.Printf("command: failed to send reply to %s: %v", from, err)
+		}
+		_ = client.MarkRead(evt.ID)
+		return
+	}
+	if !d.Exists(name) {
+		msg := fmt.Sprintf("Unknown command %s%s. Send %shelp for available commands.", d.Prefix(), name, d.Prefix())
+		if _, err := client.SendText(from, msg); err != nil {
+			log.Printf("command: failed to send reply to %s: %v", from, err)
+		}
+		_ = client.MarkRead(evt.ID)
+		return
+	}
+	if !d.CanRun(name, role) {
+		msg := fmt.Sprintf("You don't have permission to use %s%s.", d.Prefix(), name)
+		if _, err := client.SendText(from, msg); err != nil {
+			log.Printf("command: failed to send reply to %s: %v", from, err)
+		}
+		_ = client.MarkRead(evt.ID)
+		return
+	}
+
+	log.Printf("command: %q args=%q from=%s role=%s", name, args, evt.From, role)
+
+	// Send ack before potentially slow or self-terminating commands.
+	if ack := d.Ack(name); ack != "" {
+		if _, err := client.SendText(from, ack); err != nil {
+			log.Printf("command: failed to send ack to %s: %v", from, err)
+		}
+	}
+
+	req := &gateway.Request{
+		SessionKey:     sessionKey,
+		IdempotencyKey: evt.ID,
+		From:           evt.From,
+		FromName:       evt.Name,
+		Role:           role,
+	}
+	reply := d.Handle(ctx, name, args, role, sessionKey, gw, req, client)
+	if reply != "" {
+		chunks := gateway.SplitMessage(gateway.MdToWhatsApp(reply), 4096)
+		for _, chunk := range chunks {
+			if _, err := client.SendText(from, chunk); err != nil {
+				log.Printf("command: failed to send reply chunk to %s: %v", from, err)
+			}
+		}
+	}
+
+	if err := client.MarkRead(evt.ID); err != nil {
+		log.Printf("command: failed to dismiss typing for %s: %v", evt.ID, err)
+	}
 }
 
 // handleMessage sends a message to the gateway, waits for the agent's reply,
