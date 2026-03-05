@@ -136,6 +136,10 @@ func (d *Dispatcher) Handle(
 }
 
 // runShell executes a shell command and returns its combined output.
+// User-supplied args are passed exclusively via the ARGS environment variable.
+// The shell template string is never modified — {args} placeholders in shell
+// commands are intentionally not interpolated to prevent shell injection.
+// Shell templates must reference user input through $ARGS.
 func (d *Dispatcher) runShell(ctx context.Context, def config.CommandDef, args string) string {
 	timeout := d.timeout
 	if timeout <= 0 {
@@ -144,8 +148,7 @@ func (d *Dispatcher) runShell(ctx context.Context, def config.CommandDef, args s
 	tCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	shellStr := strings.ReplaceAll(def.Shell, "{args}", args)
-	cmd := exec.CommandContext(tCtx, "sh", "-c", shellStr)
+	cmd := exec.CommandContext(tCtx, "sh", "-c", def.Shell)
 	cmd.Env = append(os.Environ(), "ARGS="+args)
 
 	out, err := cmd.CombinedOutput()
