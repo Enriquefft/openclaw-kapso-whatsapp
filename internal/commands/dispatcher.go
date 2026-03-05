@@ -150,6 +150,9 @@ func (d *Dispatcher) runShell(ctx context.Context, def config.CommandDef, args s
 
 	cmd := exec.CommandContext(tCtx, "sh", "-c", def.Shell)
 	cmd.Env = append(os.Environ(), "ARGS="+args)
+	// Force-close pipes if child processes outlive the shell after timeout.
+	// Without this, CombinedOutput blocks until orphaned children release the pipe.
+	cmd.WaitDelay = 2 * time.Second
 
 	out, err := cmd.CombinedOutput()
 

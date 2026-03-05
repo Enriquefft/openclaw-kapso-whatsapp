@@ -179,7 +179,9 @@ func TestShellCommandTimeout(t *testing.T) {
 		Prefix:  "!",
 		Timeout: 1, // 1 second
 		Definitions: map[string]config.CommandDef{
-			"slow": {Type: "shell", Shell: "sleep 10"},
+			// exec replaces sh with sleep so there is no orphan child process
+			// holding the pipe open after the context kills the shell.
+			"slow": {Type: "shell", Shell: "exec sleep 10"},
 		},
 	})
 
