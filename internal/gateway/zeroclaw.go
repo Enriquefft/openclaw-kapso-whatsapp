@@ -30,8 +30,8 @@ type ZeroClaw struct {
 	url   string
 	token string
 
-	mu    sync.Mutex                // guards conns map
-	conns map[string]*senderConn   // sender key → connection
+	mu    sync.Mutex             // guards conns map
+	conns map[string]*senderConn // sender key → connection
 }
 
 // NewZeroClaw creates a ZeroClaw gateway from config.
