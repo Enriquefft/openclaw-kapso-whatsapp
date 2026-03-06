@@ -195,9 +195,13 @@ func (zc *ZeroClaw) dial(ctx context.Context) (*websocket.Conn, error) {
 }
 
 // removeSender drops a broken connection from the map so the next call
-// to connFor will reconnect.
+// to connFor will reconnect. It closes the connection before removing it
+// to ensure the OS socket is released promptly.
 func (zc *ZeroClaw) removeSender(key string) {
 	zc.mu.Lock()
+	if sc, ok := zc.conns[key]; ok {
+		_ = sc.conn.Close()
+	}
 	delete(zc.conns, key)
 	zc.mu.Unlock()
 }
