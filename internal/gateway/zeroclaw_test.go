@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/gorilla/websocket"
@@ -47,7 +48,7 @@ func TestZeroClawSendAndReceive(t *testing.T) {
 	defer close(done)
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
-	zc := &ZeroClaw{url: wsURL, token: "test-token"}
+	zc := &ZeroClaw{url: wsURL, token: "test-token", conns: make(map[string]*senderConn)}
 
 	if err := zc.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect() failed: %v", err)
@@ -106,7 +107,7 @@ func TestZeroClawErrorResponse(t *testing.T) {
 	defer close(done)
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
-	zc := &ZeroClaw{url: wsURL}
+	zc := &ZeroClaw{url: wsURL, conns: make(map[string]*senderConn)}
 
 	if err := zc.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect() failed: %v", err)
@@ -145,7 +146,7 @@ func TestZeroClawConnectSendsAuthToken(t *testing.T) {
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
 	wantToken := "my-secret-zeroclaw-token"
-	zc := &ZeroClaw{url: wsURL, token: wantToken}
+	zc := &ZeroClaw{url: wsURL, token: wantToken, conns: make(map[string]*senderConn)}
 
 	if err := zc.Connect(context.Background()); err != nil {
 		t.Fatalf("Connect() failed: %v", err)
@@ -156,5 +157,215 @@ func TestZeroClawConnectSendsAuthToken(t *testing.T) {
 	expected := fmt.Sprintf("Bearer %s", wantToken)
 	if token != expected {
 		t.Errorf("expected Authorization %q, got %q", expected, token)
+	}
+}
+
+// TestZeroClawSessionIsolation verifies that different senders get separate
+// WebSocket connections, ensuring conversation history isolation.
+func TestZeroClawSessionIsolation(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+
+	// Track per-connection message history to prove isolation.
+	type connHistory struct {
+		mu       sync.Mutex
+		messages []string
+	}
+	allConns := struct {
+		mu    sync.Mutex
+		count int
+		byID  map[int]*connHistory
+	}{byID: make(map[int]*connHistory)}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Errorf("upgrade: %v", err)
+			return
+		}
+
+		allConns.mu.Lock()
+		allConns.count++
+		id := allConns.count
+		hist := &connHistory{}
+		allConns.byID[id] = hist
+		allConns.mu.Unlock()
+
+		defer func() { _ = conn.Close() }()
+
+		for {
+			_, msg, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			var sent struct {
+				Content string `json:"content"`
+			}
+			_ = json.Unmarshal(msg, &sent)
+
+			hist.mu.Lock()
+			hist.messages = append(hist.messages, sent.Content)
+			hist.mu.Unlock()
+
+			// Echo back which connection handled it.
+			reply := fmt.Sprintf(`{"type":"done","full_response":"conn-%d: %s"}`, id, sent.Content)
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(reply))
+		}
+	}))
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	zc := &ZeroClaw{url: wsURL, conns: make(map[string]*senderConn)}
+
+	if err := zc.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() failed: %v", err)
+	}
+	defer func() { _ = zc.Close() }()
+
+	ctx := context.Background()
+
+	// Sender A sends a message.
+	replyA1, err := zc.SendAndReceive(ctx, &Request{
+		From: "+51926689401",
+		Text: "Hola soy A",
+	})
+	if err != nil {
+		t.Fatalf("sender A msg 1: %v", err)
+	}
+
+	// Sender B sends a message.
+	replyB1, err := zc.SendAndReceive(ctx, &Request{
+		From: "+51984089340",
+		Text: "Hola soy B",
+	})
+	if err != nil {
+		t.Fatalf("sender B msg 1: %v", err)
+	}
+
+	// Sender A sends another message.
+	replyA2, err := zc.SendAndReceive(ctx, &Request{
+		From: "+51926689401",
+		Text: "Segundo mensaje de A",
+	})
+	if err != nil {
+		t.Fatalf("sender A msg 2: %v", err)
+	}
+
+	// Verify they hit different connections.
+	// A's messages should be on the same connection (conn-2, since conn-1 is the probe).
+	// B's messages should be on a different connection (conn-3).
+	if !strings.HasPrefix(replyA1, "conn-2") {
+		t.Errorf("sender A msg 1 expected conn-2, got: %s", replyA1)
+	}
+	if !strings.HasPrefix(replyB1, "conn-3") {
+		t.Errorf("sender B msg 1 expected conn-3, got: %s", replyB1)
+	}
+	if !strings.HasPrefix(replyA2, "conn-2") {
+		t.Errorf("sender A msg 2 should reuse conn-2, got: %s", replyA2)
+	}
+
+	// Verify total connection count: 1 probe + 2 senders = 3.
+	allConns.mu.Lock()
+	totalConns := allConns.count
+	allConns.mu.Unlock()
+	if totalConns != 3 {
+		t.Errorf("expected 3 connections (probe + 2 senders), got %d", totalConns)
+	}
+
+	// Verify per-connection message history (proves no cross-contamination).
+	allConns.mu.Lock()
+	connAHist := allConns.byID[2]
+	connBHist := allConns.byID[3]
+	allConns.mu.Unlock()
+
+	connAHist.mu.Lock()
+	if len(connAHist.messages) != 2 {
+		t.Errorf("sender A conn should have 2 messages, got %d", len(connAHist.messages))
+	}
+	connAHist.mu.Unlock()
+
+	connBHist.mu.Lock()
+	if len(connBHist.messages) != 1 {
+		t.Errorf("sender B conn should have 1 message, got %d", len(connBHist.messages))
+	}
+	connBHist.mu.Unlock()
+}
+
+// TestZeroClawSameSenderReuseConn verifies that the same sender reuses
+// their existing WebSocket connection across multiple messages.
+func TestZeroClawSameSenderReuseConn(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	var connCount int
+	var mu sync.Mutex
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+
+		mu.Lock()
+		connCount++
+		mu.Unlock()
+
+		defer func() { _ = conn.Close() }()
+
+		for {
+			_, _, err := conn.ReadMessage()
+			if err != nil {
+				return
+			}
+			done := `{"type":"done","full_response":"ok"}`
+			_ = conn.WriteMessage(websocket.TextMessage, []byte(done))
+		}
+	}))
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	zc := &ZeroClaw{url: wsURL, conns: make(map[string]*senderConn)}
+
+	if err := zc.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() failed: %v", err)
+	}
+	defer func() { _ = zc.Close() }()
+
+	ctx := context.Background()
+	sender := "+51926689401"
+
+	for i := 0; i < 5; i++ {
+		_, err := zc.SendAndReceive(ctx, &Request{
+			From: sender,
+			Text: fmt.Sprintf("msg %d", i),
+		})
+		if err != nil {
+			t.Fatalf("message %d failed: %v", i, err)
+		}
+	}
+
+	// 1 probe from Connect() + 1 for the sender = 2 total.
+	mu.Lock()
+	got := connCount
+	mu.Unlock()
+	if got != 2 {
+		t.Errorf("expected 2 connections (probe + 1 sender), got %d", got)
+	}
+}
+
+// TestSenderKey verifies phone number normalisation for map keys.
+func TestSenderKey(t *testing.T) {
+	tests := []struct {
+		input string
+		want  string
+	}{
+		{"+51926689401", "51926689401"},
+		{"51926689401", "51926689401"},
+		{"+1 (555) 123-4567", "15551234567"},
+		{"", ""},
+	}
+
+	for _, tt := range tests {
+		got := senderKey(tt.input)
+		if got != tt.want {
+			t.Errorf("senderKey(%q) = %q, want %q", tt.input, got, tt.want)
+		}
 	}
 }
