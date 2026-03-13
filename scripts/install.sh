@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO="Enriquefft/openclaw-kapso-whatsapp"
+REPO="juanrestrepot/openclaw-kapso-whatsapp"
 INSTALL_DIR="${INSTALL_DIR:-$HOME/.local/bin}"
 TAG="${TAG:-}"
 
