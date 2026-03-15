@@ -75,6 +75,14 @@ func (p *Poller) poll(lastPoll *time.Time, out chan<- delivery.Event) {
 	forwarded := 0
 
 	for _, msg := range resp.Data {
+		// Track timestamp for ALL messages so the cursor advances past
+		// unsupported types (stickers, contacts, etc.) and they are not
+		// re-fetched on the next poll cycle.
+		msgTime := parseTimestamp(msg.Timestamp)
+		if !msgTime.IsZero() && msgTime.After(newest) {
+			newest = msgTime
+		}
+
 		text, ok := delivery.ExtractText(msg.Message, p.Client, p.Transcriber, p.MaxAudioSize)
 		if !ok {
 			continue
@@ -92,11 +100,6 @@ func (p *Poller) poll(lastPoll *time.Time, out chan<- delivery.Event) {
 			Text: text,
 		}
 		forwarded++
-
-		msgTime := parseTimestamp(msg.Timestamp)
-		if !msgTime.IsZero() && msgTime.After(newest) {
-			newest = msgTime
-		}
 	}
 
 	if forwarded > 0 {
