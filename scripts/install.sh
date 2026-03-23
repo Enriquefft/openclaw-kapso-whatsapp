@@ -49,7 +49,7 @@ if [ -z "$TAG" ]; then
   if command -v jq >/dev/null 2>&1; then
     TAG="$(echo "$api_response" | jq -r '.tag_name')"
   else
-    TAG="$(echo "$api_response" | grep '"tag_name"' | sed 's/.*"\(v[^"]*\)".*/\1/' | head -n 1)"
+    TAG="$(echo "$api_response" | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -n 1)"
   fi
 fi
 
