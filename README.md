@@ -8,6 +8,7 @@ Give your [OpenClaw](https://openclaw.ai) AI agent a WhatsApp number.
 Official Meta Cloud API via [Kapso](https://kapso.ai) — a unified API for WhatsApp Cloud. No ban risk.
 Stateless. Two Go binaries. Near-zero idle CPU.
 
+[![Hypercommit](https://img.shields.io/badge/Hypercommit-DB2475)](https://hypercommit.com/openclaw-kapso-whatsapp)
 [![CI](https://github.com/Enriquefft/openclaw-kapso-whatsapp/actions/workflows/ci.yml/badge.svg)](https://github.com/Enriquefft/openclaw-kapso-whatsapp/actions/workflows/ci.yml)
 [![Go](https://img.shields.io/github/go-mod/go-version/Enriquefft/openclaw-kapso-whatsapp)](https://go.dev/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
