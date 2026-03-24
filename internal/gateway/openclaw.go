@@ -349,12 +349,14 @@ func (oc *OpenClaw) SendAndReceive(ctx context.Context, req *Request) (string, e
 		sessionKey = oc.sessionKey
 	}
 
+	// Start reply watch *before* sending so fast assistant replies are not missed.
+	since := time.Now().UTC().Add(-2 * time.Second)
+
 	if err := oc.send(sessionKey, req.IdempotencyKey, taggedText); err != nil {
 		return "", err
 	}
 
 	// Poll the session JSONL for the agent's reply.
-	since := time.Now().UTC()
 	deadline := time.Now().Add(10 * time.Minute)
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
