@@ -143,7 +143,7 @@ func TestMarkReadWithTyping(t *testing.T) {
 	})
 }
 
-func TestValidateMediaURL(t *testing.T) {
+func TestSanitizeMediaURL(t *testing.T) {
 	tests := []struct {
 		name    string
 		url     string
@@ -163,9 +163,12 @@ func TestValidateMediaURL(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validateMediaURL(tt.url)
+			u, err := sanitizeMediaURL(tt.url)
 			if (err != nil) != tt.wantErr {
-				t.Errorf("validateMediaURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+				t.Errorf("sanitizeMediaURL(%q) error = %v, wantErr %v", tt.url, err, tt.wantErr)
+			}
+			if err == nil && u.String() != tt.url {
+				t.Errorf("sanitizeMediaURL(%q).String() = %q, want round-trip", tt.url, u.String())
 			}
 		})
 	}

@@ -137,11 +137,14 @@ func (c *Client) markRead(messageID string, typing *TypingIndicator) error {
 // a +1 sentinel: if the server sends more than maxBytes, an error is returned.
 // Only HTTPS URLs with allowed hostnames are accepted to prevent SSRF.
 func (c *Client) DownloadMedia(rawURL string, maxBytes int64) ([]byte, error) {
-	if err := validateMediaURL(rawURL); err != nil {
+	safeURL, err := sanitizeMediaURL(rawURL)
+	if err != nil {
 		return nil, fmt.Errorf("invalid media URL: %w", err)
 	}
 
-	req, err := http.NewRequest("GET", rawURL, nil)
+	// Use the reconstructed URL (safeURL.String()) instead of the raw input
+	// to break the taint chain for static analysis (CodeQL go/request-forgery).
+	req, err := http.NewRequest("GET", safeURL.String(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
@@ -180,23 +183,25 @@ var allowedMediaHosts = []string{
 	".fbcdn.net",
 }
 
-// validateMediaURL ensures rawURL is HTTPS and points to an allowed host.
-func validateMediaURL(rawURL string) error {
+// sanitizeMediaURL parses rawURL, validates that it is HTTPS with an allowed
+// host, and returns the parsed *url.URL. Callers should use u.String() to
+// obtain a clean URL, which breaks the taint chain for static analysis tools.
+func sanitizeMediaURL(rawURL string) (*url.URL, error) {
 	u, err := url.Parse(rawURL)
 	if err != nil {
-		return fmt.Errorf("parse URL: %w", err)
+		return nil, fmt.Errorf("parse URL: %w", err)
 	}
 
 	if !strings.EqualFold(u.Scheme, "https") {
-		return fmt.Errorf("only HTTPS URLs are allowed, got %q", u.Scheme)
+		return nil, fmt.Errorf("only HTTPS URLs are allowed, got %q", u.Scheme)
 	}
 
 	host := strings.ToLower(u.Hostname())
 	for _, suffix := range allowedMediaHosts {
 		if host == strings.TrimPrefix(suffix, ".") || strings.HasSuffix(host, suffix) {
-			return nil
+			return u, nil
 		}
 	}
 
-	return fmt.Errorf("host %q is not in the allowed list", host)
+	return nil, fmt.Errorf("host %q is not in the allowed list", host)
 }
