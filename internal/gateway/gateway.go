@@ -32,13 +32,32 @@ type Request struct {
 }
 
 // New creates the appropriate Gateway for the configured type.
-func New(cfg config.GatewayConfig) (Gateway, error) {
+func New(cfg config.GatewayConfig, opts ...Option) (Gateway, error) {
+	var o options
+	for _, fn := range opts {
+		fn(&o)
+	}
 	switch cfg.Type {
 	case "", "openclaw":
+		if o.signer != nil {
+			return NewOpenClawWithSigner(cfg, o.signer), nil
+		}
 		return NewOpenClaw(cfg), nil
 	case "zeroclaw":
 		return NewZeroClaw(cfg), nil
 	default:
 		return nil, fmt.Errorf("unknown gateway type: %q", cfg.Type)
 	}
+}
+
+type options struct {
+	signer Signer
+}
+
+// Option configures gateway construction.
+type Option func(*options)
+
+// WithSigner attaches a device identity signer to the gateway.
+func WithSigner(s Signer) Option {
+	return func(o *options) { o.signer = s }
 }

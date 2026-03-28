@@ -1,31 +1,25 @@
 package device
 
 import (
-	"crypto/ecdsa"
-	"crypto/elliptic"
+	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/x509"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/pem"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
-	"time"
 )
 
 const keyFile = "device-key.pem"
 
-// Identity holds a persistent ECDSA P-256 keypair used to prove device
-// identity to the OpenClaw gateway.
 type Identity struct {
-	key    *ecdsa.PrivateKey
-	pubDER []byte // pre-computed DER-encoded public key
+	key ed25519.PrivateKey
+	pub ed25519.PublicKey
 }
 
-// LoadOrCreate reads an existing device key from dir, or generates a new
-// P-256 key and persists it. The directory is created if it does not exist.
 func LoadOrCreate(dir string) (*Identity, error) {
 	path := filepath.Join(dir, keyFile)
 
@@ -33,17 +27,16 @@ func LoadOrCreate(dir string) (*Identity, error) {
 	if err == nil {
 		key, parseErr := parseKey(data)
 		if parseErr != nil {
-			return nil, fmt.Errorf("parse device key %s: %w", path, parseErr)
+			log.Printf("device: removing incompatible key at %s (%v), generating new Ed25519 key", path, parseErr)
+			_ = os.Remove(path)
+		} else {
+			return &Identity{key: key, pub: key.Public().(ed25519.PublicKey)}, nil
 		}
-		return newIdentity(key)
-	}
-
-	if !os.IsNotExist(err) {
+	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read device key %s: %w", path, err)
 	}
 
-	// Generate new key.
-	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, fmt.Errorf("generate device key: %w", err)
 	}
@@ -52,59 +45,39 @@ func LoadOrCreate(dir string) (*Identity, error) {
 		return nil, fmt.Errorf("create state dir %s: %w", dir, err)
 	}
 
-	derBytes, err := x509.MarshalECPrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("marshal device key: %w", err)
-	}
-
 	pemBlock := pem.EncodeToMemory(&pem.Block{
-		Type:  "EC PRIVATE KEY",
-		Bytes: derBytes,
+		Type:  "PRIVATE KEY",
+		Bytes: priv.Seed(),
 	})
 
 	if err := os.WriteFile(path, pemBlock, 0o600); err != nil {
 		return nil, fmt.Errorf("write device key %s: %w", path, err)
 	}
 
-	return newIdentity(key)
+	return &Identity{key: priv, pub: pub}, nil
 }
 
-func newIdentity(key *ecdsa.PrivateKey) (*Identity, error) {
-	pub, err := x509.MarshalPKIXPublicKey(&key.PublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("marshal public key: %w", err)
-	}
-	return &Identity{key: key, pubDER: pub}, nil
-}
-
-// DeviceID returns a hex-encoded SHA-256 fingerprint of the public key.
 func (id *Identity) DeviceID() string {
-	h := sha256.Sum256(id.pubDER)
+	h := sha256.Sum256(id.pub)
 	return hex.EncodeToString(h[:])
 }
 
-// PublicKeyBase64 returns the base64-encoded DER public key.
 func (id *Identity) PublicKeyBase64() string {
-	return base64.StdEncoding.EncodeToString(id.pubDER)
+	return base64.RawURLEncoding.EncodeToString(id.pub)
 }
 
-// Sign signs the given nonce with the device private key and returns the
-// base64-encoded ASN.1 DER signature plus the signing timestamp (Unix ms).
-func (id *Identity) Sign(nonce string) (signature string, signedAt int64, err error) {
-	h := sha256.Sum256([]byte(nonce))
-	sig, err := ecdsa.SignASN1(rand.Reader, id.key, h[:])
-	if err != nil {
-		return "", 0, fmt.Errorf("sign nonce: %w", err)
-	}
-
-	now := time.Now().UnixMilli()
-	return base64.StdEncoding.EncodeToString(sig), now, nil
+func (id *Identity) Sign(data []byte) []byte {
+	return ed25519.Sign(id.key, data)
 }
 
-func parseKey(data []byte) (*ecdsa.PrivateKey, error) {
+func parseKey(data []byte) (ed25519.PrivateKey, error) {
 	block, _ := pem.Decode(data)
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found")
 	}
-	return x509.ParseECPrivateKey(block.Bytes)
+	seed := block.Bytes
+	if len(seed) != ed25519.SeedSize {
+		return nil, fmt.Errorf("invalid Ed25519 seed length: %d", len(seed))
+	}
+	return ed25519.NewKeyFromSeed(seed), nil
 }

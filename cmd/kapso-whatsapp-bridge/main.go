@@ -15,6 +15,7 @@ import (
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/commands"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/config"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery"
+	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/device"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/poller"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/delivery/webhook"
 	"github.com/Enriquefft/openclaw-kapso-whatsapp/internal/gateway"
@@ -51,8 +52,15 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	// Load or create device identity for gateway authentication.
+	ident, err := device.LoadOrCreate(cfg.State.Dir)
+	if err != nil {
+		log.Fatalf("device identity: %v", err)
+	}
+	log.Printf("device: id=%s", ident.DeviceID()[:16])
+
 	// Connect to the AI gateway (OpenClaw, ZeroClaw, etc.).
-	gw, err := gateway.New(cfg.Gateway)
+	gw, err := gateway.New(cfg.Gateway, gateway.WithSigner(ident))
 	if err != nil {
 		log.Fatalf("invalid gateway config: %v", err)
 	}

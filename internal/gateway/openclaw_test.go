@@ -20,16 +20,15 @@ import (
 type mockSigner struct {
 	id    string
 	pubK  string
-	sig   string
-	ts    int64
+	sig   []byte
 	nonce string
 }
 
 func (m *mockSigner) DeviceID() string        { return m.id }
 func (m *mockSigner) PublicKeyBase64() string { return m.pubK }
-func (m *mockSigner) Sign(nonce string) (string, int64, error) {
-	m.nonce = nonce
-	return m.sig, m.ts, nil
+func (m *mockSigner) Sign(data []byte) []byte {
+	m.nonce = string(data)
+	return m.sig
 }
 
 // newTestOpenClaw creates an OpenClaw gateway pointed at the given WebSocket URL.
@@ -284,8 +283,7 @@ func TestConnectIncludesDeviceIdentity(t *testing.T) {
 	signer := &mockSigner{
 		id:   "device-fingerprint-abc",
 		pubK: "dGVzdC1wdWJsaWMta2V5",
-		sig:  "dGVzdC1zaWduYXR1cmU=",
-		ts:   1737264000000,
+		sig:  []byte("test-signature"),
 	}
 
 	client := newTestOpenClaw(wsURL, "test-token", signer)
@@ -329,18 +327,18 @@ func TestConnectIncludesDeviceIdentity(t *testing.T) {
 	if d.PublicKey != "dGVzdC1wdWJsaWMta2V5" {
 		t.Errorf("device.publicKey: got %q, want %q", d.PublicKey, "dGVzdC1wdWJsaWMta2V5")
 	}
-	if d.Signature != "dGVzdC1zaWduYXR1cmU=" {
-		t.Errorf("device.signature: got %q, want %q", d.Signature, "dGVzdC1zaWduYXR1cmU=")
+	if d.Signature != "dGVzdC1zaWduYXR1cmU" {
+		t.Errorf("device.signature: got %q, want %q", d.Signature, "dGVzdC1zaWduYXR1cmU")
 	}
-	if d.SignedAt != 1737264000000 {
-		t.Errorf("device.signedAt: got %d, want %d", d.SignedAt, 1737264000000)
+	if d.SignedAt <= 0 {
+		t.Errorf("device.signedAt: got %d, want positive timestamp", d.SignedAt)
 	}
 	if d.Nonce != challengeNonce {
 		t.Errorf("device.nonce: got %q, want %q", d.Nonce, challengeNonce)
 	}
 
-	if signer.nonce != challengeNonce {
-		t.Errorf("signer received nonce %q, want %q", signer.nonce, challengeNonce)
+	if !strings.Contains(signer.nonce, challengeNonce) {
+		t.Errorf("signer payload should contain nonce %q, got %q", challengeNonce, signer.nonce)
 	}
 }
 
@@ -445,7 +443,7 @@ func TestConnectWithSignerButNoNonceErrors(t *testing.T) {
 	defer close(done)
 
 	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
-	signer := &mockSigner{id: "test", pubK: "dGVzdA==", sig: "c2ln", ts: 1}
+	signer := &mockSigner{id: "test", pubK: "dGVzdA==", sig: []byte("sig")}
 	client := newTestOpenClaw(wsURL, "test-token", signer)
 
 	err := client.Connect(context.Background())
