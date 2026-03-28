@@ -21,13 +21,13 @@ type mockSigner struct {
 	id    string
 	pubK  string
 	sig   []byte
-	nonce string
+	lastPayload string
 }
 
 func (m *mockSigner) DeviceID() string        { return m.id }
 func (m *mockSigner) PublicKeyBase64() string { return m.pubK }
 func (m *mockSigner) Sign(data []byte) []byte {
-	m.nonce = string(data)
+	m.lastPayload = string(data)
 	return m.sig
 }
 
@@ -337,8 +337,8 @@ func TestConnectIncludesDeviceIdentity(t *testing.T) {
 		t.Errorf("device.nonce: got %q, want %q", d.Nonce, challengeNonce)
 	}
 
-	if !strings.Contains(signer.nonce, challengeNonce) {
-		t.Errorf("signer payload should contain nonce %q, got %q", challengeNonce, signer.nonce)
+	if !strings.Contains(signer.lastPayload, challengeNonce) {
+		t.Errorf("signer payload should contain nonce %q, got %q", challengeNonce, signer.lastPayload)
 	}
 }
 
