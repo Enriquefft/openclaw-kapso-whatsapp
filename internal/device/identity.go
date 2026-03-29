@@ -15,11 +15,16 @@ import (
 
 const keyFile = "device-key.pem"
 
+// Identity holds a persistent Ed25519 keypair used to prove device
+// identity to the OpenClaw gateway during the v3 handshake.
 type Identity struct {
 	key ed25519.PrivateKey
 	pub ed25519.PublicKey
 }
 
+// LoadOrCreate reads an existing device key from dir, or generates a new
+// Ed25519 key and persists it. Incompatible keys (e.g. old ECDSA) are
+// removed and regenerated automatically. The directory is created if needed.
 func LoadOrCreate(dir string) (*Identity, error) {
 	path := filepath.Join(dir, keyFile)
 
@@ -46,7 +51,7 @@ func LoadOrCreate(dir string) (*Identity, error) {
 	}
 
 	pemBlock := pem.EncodeToMemory(&pem.Block{
-		Type:  "PRIVATE KEY",
+		Type:  "ED25519 SEED",
 		Bytes: priv.Seed(),
 	})
 
@@ -57,15 +62,18 @@ func LoadOrCreate(dir string) (*Identity, error) {
 	return &Identity{key: priv, pub: pub}, nil
 }
 
+// DeviceID returns a hex-encoded SHA-256 fingerprint of the public key.
 func (id *Identity) DeviceID() string {
 	h := sha256.Sum256(id.pub)
 	return hex.EncodeToString(h[:])
 }
 
+// PublicKeyBase64 returns the raw public key encoded as base64url (no padding).
 func (id *Identity) PublicKeyBase64() string {
 	return base64.RawURLEncoding.EncodeToString(id.pub)
 }
 
+// Sign signs the given data with the device private key using Ed25519.
 func (id *Identity) Sign(data []byte) []byte {
 	return ed25519.Sign(id.key, data)
 }
@@ -74,6 +82,9 @@ func parseKey(data []byte) (ed25519.PrivateKey, error) {
 	block, _ := pem.Decode(data)
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found")
+	}
+	if block.Type != "ED25519 SEED" {
+		return nil, fmt.Errorf("unexpected PEM type %q", block.Type)
 	}
 	seed := block.Bytes
 	if len(seed) != ed25519.SeedSize {

@@ -18,9 +18,9 @@ import (
 
 // mockSigner is a test double for the Signer interface.
 type mockSigner struct {
-	id    string
-	pubK  string
-	sig   []byte
+	id          string
+	pubK        string
+	sig         []byte
 	lastPayload string
 }
 
@@ -37,6 +37,8 @@ func newTestOpenClaw(url, token string, signer Signer) *OpenClaw {
 		url:     url,
 		token:   token,
 		signer:  signer,
+		role:    "operator",
+		scopes:  []string{"operator.read", "operator.write"},
 		tracker: newReplyTracker(),
 	}
 	return oc
@@ -857,6 +859,137 @@ func TestCloseUnblocksPendingSendRequest(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("sendRequest did not unblock after Close — deadlock")
+	}
+}
+
+// TestConnectCustomRoleAndScopes verifies that non-default role and scopes
+// from config propagate to the connect handshake on the wire.
+func TestConnectCustomRoleAndScopes(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	connectFrame := make(chan []byte, 1)
+	done := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+
+		challenge := responseFrame{Type: "event", Method: "challenge"}
+		data, _ := json.Marshal(challenge)
+		_ = conn.WriteMessage(websocket.TextMessage, data)
+
+		_, msg, _ := conn.ReadMessage()
+		connectFrame <- msg
+
+		resp := responseFrame{Type: "res", ID: "kapso-1", Result: json.RawMessage(`{"ok":true}`)}
+		data, _ = json.Marshal(resp)
+		_ = conn.WriteMessage(websocket.TextMessage, data)
+
+		<-done
+	}))
+	defer srv.Close()
+	defer close(done)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	client := &OpenClaw{
+		url:     wsURL,
+		token:   "t",
+		role:    "viewer",
+		scopes:  []string{"viewer.read"},
+		tracker: newReplyTracker(),
+	}
+
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() failed: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	raw := <-connectFrame
+	var frame struct {
+		Params struct {
+			Role   string   `json:"role"`
+			Scopes []string `json:"scopes"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if frame.Params.Role != "viewer" {
+		t.Errorf("role: got %q, want %q", frame.Params.Role, "viewer")
+	}
+	if len(frame.Params.Scopes) != 1 || frame.Params.Scopes[0] != "viewer.read" {
+		t.Errorf("scopes: got %v, want [viewer.read]", frame.Params.Scopes)
+	}
+}
+
+// TestBuildDeviceAuthPayloadV3 verifies the pipe-delimited v3 payload format
+// that the gateway validates field-by-field during device auth.
+func TestBuildDeviceAuthPayloadV3(t *testing.T) {
+	tests := []struct {
+		name         string
+		deviceID     string
+		clientID     string
+		clientMode   string
+		role         string
+		token        string
+		scopes       []string
+		signedAtMs   int64
+		nonce        string
+		platform     string
+		deviceFamily string
+		want         string
+	}{
+		{
+			name:       "standard fields",
+			deviceID:   "abc123",
+			clientID:   "gateway-client",
+			clientMode: "backend",
+			role:       "operator",
+			token:      "tok-xyz",
+			scopes:     []string{"operator.read", "operator.write"},
+			signedAtMs: 1700000000000,
+			nonce:      "nonce-42",
+			platform:   "linux",
+			want:       "v3|abc123|gateway-client|backend|operator|operator.read,operator.write|1700000000000|tok-xyz|nonce-42|linux|",
+		},
+		{
+			name:         "platform normalization",
+			deviceID:     "dev1",
+			clientID:     "cli",
+			clientMode:   "backend",
+			role:         "operator",
+			token:        "t",
+			scopes:       []string{"operator.read"},
+			signedAtMs:   1,
+			nonce:        "n",
+			platform:     "  Darwin ",
+			deviceFamily: " Desktop ",
+			want:         "v3|dev1|cli|backend|operator|operator.read|1|t|n|darwin|desktop",
+		},
+		{
+			name:       "empty scopes",
+			deviceID:   "d",
+			clientID:   "c",
+			clientMode: "backend",
+			role:       "viewer",
+			token:      "t",
+			scopes:     nil,
+			signedAtMs: 0,
+			nonce:      "n",
+			platform:   "linux",
+			want:       "v3|d|c|backend|viewer||0|t|n|linux|",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildDeviceAuthPayloadV3(tt.deviceID, tt.clientID, tt.clientMode, tt.role, tt.token, tt.scopes, tt.signedAtMs, tt.nonce, tt.platform, tt.deviceFamily)
+			if got != tt.want {
+				t.Errorf("buildDeviceAuthPayloadV3():\n  got  %q\n  want %q", got, tt.want)
+			}
+		})
 	}
 }
 
