@@ -227,6 +227,64 @@ func TestTranscribeValidateZeroMaxAudioSize(t *testing.T) {
 	}
 }
 
+// TestGatewayDefaults verifies that defaults() returns the expected role and scopes.
+func TestGatewayDefaults(t *testing.T) {
+	cfg := defaults()
+
+	if cfg.Gateway.Role != "operator" {
+		t.Errorf("Role default: got %q, want %q", cfg.Gateway.Role, "operator")
+	}
+	if len(cfg.Gateway.Scopes) != 2 || cfg.Gateway.Scopes[0] != "operator.read" || cfg.Gateway.Scopes[1] != "operator.write" {
+		t.Errorf("Scopes default: got %v, want [operator.read operator.write]", cfg.Gateway.Scopes)
+	}
+}
+
+// TestGatewayEnvOverrides verifies GATEWAY_ROLE and GATEWAY_SCOPES env vars.
+func TestGatewayEnvOverrides(t *testing.T) {
+	t.Run("GATEWAY_ROLE", func(t *testing.T) {
+		t.Setenv("GATEWAY_ROLE", "viewer")
+		cfg := defaults()
+		applyEnv(&cfg)
+		if cfg.Gateway.Role != "viewer" {
+			t.Errorf("Role: got %q, want %q", cfg.Gateway.Role, "viewer")
+		}
+	})
+
+	t.Run("GATEWAY_SCOPES", func(t *testing.T) {
+		t.Setenv("GATEWAY_SCOPES", "operator.read")
+		cfg := defaults()
+		applyEnv(&cfg)
+		if len(cfg.Gateway.Scopes) != 1 || cfg.Gateway.Scopes[0] != "operator.read" {
+			t.Errorf("Scopes: got %v, want [operator.read]", cfg.Gateway.Scopes)
+		}
+	})
+
+	t.Run("GATEWAY_SCOPES trims whitespace", func(t *testing.T) {
+		t.Setenv("GATEWAY_SCOPES", "operator.read, operator.write")
+		cfg := defaults()
+		applyEnv(&cfg)
+		if len(cfg.Gateway.Scopes) != 2 || cfg.Gateway.Scopes[1] != "operator.write" {
+			t.Errorf("Scopes should trim whitespace: got %v", cfg.Gateway.Scopes)
+		}
+	})
+}
+
+// TestGatewayValidateEmptyRoleScopes verifies Validate() resets empty role/scopes.
+func TestGatewayValidateEmptyRoleScopes(t *testing.T) {
+	cfg := defaults()
+	cfg.Gateway.Role = ""
+	cfg.Gateway.Scopes = nil
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("Validate() error: %v", err)
+	}
+	if cfg.Gateway.Role != "operator" {
+		t.Errorf("Role after Validate: got %q, want %q", cfg.Gateway.Role, "operator")
+	}
+	if len(cfg.Gateway.Scopes) != 2 {
+		t.Errorf("Scopes after Validate: got %v, want [operator.read operator.write]", cfg.Gateway.Scopes)
+	}
+}
+
 // TestTranscribeEmptyProviderNoError verifies that Load() succeeds when no
 // transcribe provider is configured (empty provider is valid).
 func TestTranscribeEmptyProviderNoError(t *testing.T) {

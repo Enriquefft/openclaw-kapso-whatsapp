@@ -83,10 +83,7 @@ func parseKey(data []byte) (ed25519.PrivateKey, error) {
 	if block == nil {
 		return nil, fmt.Errorf("no PEM block found")
 	}
-	// Accept both the current "ED25519 SEED" and the legacy "PRIVATE KEY" type.
-	switch block.Type {
-	case "ED25519 SEED", "PRIVATE KEY":
-	default:
+	if block.Type != "ED25519 SEED" {
 		return nil, fmt.Errorf("unexpected PEM type %q", block.Type)
 	}
 	seed := block.Bytes

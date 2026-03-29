@@ -862,6 +862,68 @@ func TestCloseUnblocksPendingSendRequest(t *testing.T) {
 	}
 }
 
+// TestConnectCustomRoleAndScopes verifies that non-default role and scopes
+// from config propagate to the connect handshake on the wire.
+func TestConnectCustomRoleAndScopes(t *testing.T) {
+	var upgrader = websocket.Upgrader{}
+	connectFrame := make(chan []byte, 1)
+	done := make(chan struct{})
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			return
+		}
+		defer func() { _ = conn.Close() }()
+
+		challenge := responseFrame{Type: "event", Method: "challenge"}
+		data, _ := json.Marshal(challenge)
+		_ = conn.WriteMessage(websocket.TextMessage, data)
+
+		_, msg, _ := conn.ReadMessage()
+		connectFrame <- msg
+
+		resp := responseFrame{Type: "res", ID: "kapso-1", Result: json.RawMessage(`{"ok":true}`)}
+		data, _ = json.Marshal(resp)
+		_ = conn.WriteMessage(websocket.TextMessage, data)
+
+		<-done
+	}))
+	defer srv.Close()
+	defer close(done)
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	client := &OpenClaw{
+		url:     wsURL,
+		token:   "t",
+		role:    "viewer",
+		scopes:  []string{"viewer.read"},
+		tracker: newReplyTracker(),
+	}
+
+	if err := client.Connect(context.Background()); err != nil {
+		t.Fatalf("Connect() failed: %v", err)
+	}
+	defer func() { _ = client.Close() }()
+
+	raw := <-connectFrame
+	var frame struct {
+		Params struct {
+			Role   string   `json:"role"`
+			Scopes []string `json:"scopes"`
+		} `json:"params"`
+	}
+	if err := json.Unmarshal(raw, &frame); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if frame.Params.Role != "viewer" {
+		t.Errorf("role: got %q, want %q", frame.Params.Role, "viewer")
+	}
+	if len(frame.Params.Scopes) != 1 || frame.Params.Scopes[0] != "viewer.read" {
+		t.Errorf("scopes: got %v, want [viewer.read]", frame.Params.Scopes)
+	}
+}
+
 // TestBuildDeviceAuthPayloadV3 verifies the pipe-delimited v3 payload format
 // that the gateway validates field-by-field during device auth.
 func TestBuildDeviceAuthPayloadV3(t *testing.T) {

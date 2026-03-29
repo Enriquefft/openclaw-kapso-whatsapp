@@ -230,7 +230,11 @@ func applyEnv(cfg *Config) {
 		cfg.Gateway.Role = v
 	}
 	if v := os.Getenv("GATEWAY_SCOPES"); v != "" {
-		cfg.Gateway.Scopes = strings.Split(v, ",")
+		parts := strings.Split(v, ",")
+		for i, s := range parts {
+			parts[i] = strings.TrimSpace(s)
+		}
+		cfg.Gateway.Scopes = parts
 	}
 
 	if v := os.Getenv("KAPSO_STATE_DIR"); v != "" {
@@ -382,6 +386,14 @@ func (c *Config) Validate() error {
 				seen[phone] = role
 			}
 		}
+	}
+
+	// Gateway validation: reset empty role/scopes to defaults.
+	if c.Gateway.Role == "" {
+		c.Gateway.Role = "operator"
+	}
+	if len(c.Gateway.Scopes) == 0 {
+		c.Gateway.Scopes = []string{"operator.read", "operator.write"}
 	}
 
 	// Transcribe validation: reset MaxAudioSize if zero or negative (guards TOML zero-value masking).
