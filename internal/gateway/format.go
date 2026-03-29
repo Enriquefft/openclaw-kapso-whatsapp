@@ -7,6 +7,10 @@ import (
 
 // Compiled regexes for mdToWhatsApp compiled once at startup.
 var (
+	// reDirective strips OpenClaw internal directive tags that should not
+	// appear in user-visible messages (e.g. [[reply_to_current]],
+	// [[reply_to:<id>]], [[audio_as_voice]]).
+	reDirective  = regexp.MustCompile(`\[\[\s*(?:reply_to_current|reply_to_previous|reply_to\s*:\s*[^\]\n]+|audio_as_voice)\s*\]\]\s*`)
 	reBold       = regexp.MustCompile(`\*\*(.+?)\*\*`)
 	reItalic     = regexp.MustCompile(`\*(.+?)\*`)
 	reStrike     = regexp.MustCompile(`~~(.+?)~~`)
@@ -17,6 +21,9 @@ var (
 // MdToWhatsApp converts Markdown formatting to WhatsApp-compatible formatting.
 func MdToWhatsApp(text string) string {
 	const boldMarker = "\x01"
+
+	// Strip internal directive tags before any formatting.
+	text = reDirective.ReplaceAllString(text, "")
 
 	result := reBold.ReplaceAllString(text, boldMarker+"$1"+boldMarker)
 	result = reItalic.ReplaceAllString(result, "_$1_")
