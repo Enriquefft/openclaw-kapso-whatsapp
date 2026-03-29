@@ -37,6 +37,8 @@ func newTestOpenClaw(url, token string, signer Signer) *OpenClaw {
 		url:     url,
 		token:   token,
 		signer:  signer,
+		role:    "operator",
+		scopes:  []string{"operator.read", "operator.write"},
 		tracker: newReplyTracker(),
 	}
 	return oc
@@ -857,6 +859,75 @@ func TestCloseUnblocksPendingSendRequest(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("sendRequest did not unblock after Close — deadlock")
+	}
+}
+
+// TestBuildDeviceAuthPayloadV3 verifies the pipe-delimited v3 payload format
+// that the gateway validates field-by-field during device auth.
+func TestBuildDeviceAuthPayloadV3(t *testing.T) {
+	tests := []struct {
+		name         string
+		deviceID     string
+		clientID     string
+		clientMode   string
+		role         string
+		token        string
+		scopes       []string
+		signedAtMs   int64
+		nonce        string
+		platform     string
+		deviceFamily string
+		want         string
+	}{
+		{
+			name:       "standard fields",
+			deviceID:   "abc123",
+			clientID:   "gateway-client",
+			clientMode: "backend",
+			role:       "operator",
+			token:      "tok-xyz",
+			scopes:     []string{"operator.read", "operator.write"},
+			signedAtMs: 1700000000000,
+			nonce:      "nonce-42",
+			platform:   "linux",
+			want:       "v3|abc123|gateway-client|backend|operator|operator.read,operator.write|1700000000000|tok-xyz|nonce-42|linux|",
+		},
+		{
+			name:         "platform normalization",
+			deviceID:     "dev1",
+			clientID:     "cli",
+			clientMode:   "backend",
+			role:         "operator",
+			token:        "t",
+			scopes:       []string{"operator.read"},
+			signedAtMs:   1,
+			nonce:        "n",
+			platform:     "  Darwin ",
+			deviceFamily: " Desktop ",
+			want:         "v3|dev1|cli|backend|operator|operator.read|1|t|n|darwin|desktop",
+		},
+		{
+			name:       "empty scopes",
+			deviceID:   "d",
+			clientID:   "c",
+			clientMode: "backend",
+			role:       "viewer",
+			token:      "t",
+			scopes:     nil,
+			signedAtMs: 0,
+			nonce:      "n",
+			platform:   "linux",
+			want:       "v3|d|c|backend|viewer||0|t|n|linux|",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := buildDeviceAuthPayloadV3(tt.deviceID, tt.clientID, tt.clientMode, tt.role, tt.token, tt.scopes, tt.signedAtMs, tt.nonce, tt.platform, tt.deviceFamily)
+			if got != tt.want {
+				t.Errorf("buildDeviceAuthPayloadV3():\n  got  %q\n  want %q", got, tt.want)
+			}
+		})
 	}
 }
 

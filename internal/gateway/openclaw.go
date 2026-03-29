@@ -122,6 +122,8 @@ type OpenClaw struct {
 	signer       Signer
 	sessionsJSON string
 	sessionKey   string
+	role         string
+	scopes       []string
 
 	conn    *websocket.Conn
 	mu      sync.Mutex // guards conn, seq, and writes
@@ -141,6 +143,8 @@ func NewOpenClaw(cfg config.GatewayConfig) *OpenClaw {
 		token:        cfg.Token,
 		sessionsJSON: cfg.SessionsJSON,
 		sessionKey:   cfg.SessionKey,
+		role:         cfg.Role,
+		scopes:       cfg.Scopes,
 		tracker:      newReplyTracker(),
 	}
 }
@@ -198,13 +202,15 @@ func (oc *OpenClaw) Connect(ctx context.Context) error {
 
 	clientID := "gateway-client"
 	clientMode := "backend"
-	role := "operator"
-	scopes := []string{"operator.read", "operator.write"}
+	role := oc.role
+	scopes := oc.scopes
 	platform := runtime.GOOS
 
 	// Build device identity if a signer is configured.
 	var deviceInfo *DeviceInfo
-	if oc.signer != nil {
+	if oc.signer == nil {
+		log.Printf("warning: connecting without device identity — gateway may reject scoped operations")
+	} else {
 		nonce := challenge.Payload.Nonce
 		if nonce == "" {
 			_ = conn.Close()

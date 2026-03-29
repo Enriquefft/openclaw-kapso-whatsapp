@@ -74,12 +74,14 @@ type WebhookConfig struct {
 }
 
 type GatewayConfig struct {
-	Type         string `toml:"type"` // "openclaw" (default) or "zeroclaw"
-	URL          string `toml:"url"`
-	Token        string `toml:"token"`
-	SessionKey   string `toml:"session_key"`   // OpenClaw only
-	SessionsJSON string `toml:"sessions_json"` // OpenClaw only
-	ErrorMessage string `toml:"error_message"` // sent to WhatsApp when agent fails
+	Type         string   `toml:"type"` // "openclaw" (default) or "zeroclaw"
+	URL          string   `toml:"url"`
+	Token        string   `toml:"token"`
+	SessionKey   string   `toml:"session_key"`   // OpenClaw only
+	SessionsJSON string   `toml:"sessions_json"` // OpenClaw only
+	ErrorMessage string   `toml:"error_message"` // sent to WhatsApp when agent fails
+	Role         string   `toml:"role"`           // OpenClaw role, default "operator"
+	Scopes       []string `toml:"scopes"`         // OpenClaw scopes, default ["operator.read","operator.write"]
 }
 
 type StateConfig struct {
@@ -111,6 +113,8 @@ func defaults() Config {
 			SessionKey:   "main",
 			SessionsJSON: filepath.Join(home, ".openclaw", "agents", "main", "sessions", "sessions.json"),
 			ErrorMessage: "Sorry, I ran into an issue processing your message. Please try again in a moment.",
+			Role:         "operator",
+			Scopes:       []string{"operator.read", "operator.write"},
 		},
 		State: StateConfig{
 			Dir: filepath.Join(home, ".config", "kapso-whatsapp"),
@@ -221,6 +225,12 @@ func applyEnv(cfg *Config) {
 	}
 	if v := os.Getenv("GATEWAY_ERROR_MESSAGE"); v != "" {
 		cfg.Gateway.ErrorMessage = v
+	}
+	if v := os.Getenv("GATEWAY_ROLE"); v != "" {
+		cfg.Gateway.Role = v
+	}
+	if v := os.Getenv("GATEWAY_SCOPES"); v != "" {
+		cfg.Gateway.Scopes = strings.Split(v, ",")
 	}
 
 	if v := os.Getenv("KAPSO_STATE_DIR"); v != "" {
