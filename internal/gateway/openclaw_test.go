@@ -18,9 +18,9 @@ import (
 
 // mockSigner is a test double for the Signer interface.
 type mockSigner struct {
-	id    string
-	pubK  string
-	sig   []byte
+	id          string
+	pubK        string
+	sig         []byte
 	lastPayload string
 }
 

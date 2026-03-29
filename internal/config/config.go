@@ -80,8 +80,8 @@ type GatewayConfig struct {
 	SessionKey   string   `toml:"session_key"`   // OpenClaw only
 	SessionsJSON string   `toml:"sessions_json"` // OpenClaw only
 	ErrorMessage string   `toml:"error_message"` // sent to WhatsApp when agent fails
-	Role         string   `toml:"role"`           // OpenClaw role, default "operator"
-	Scopes       []string `toml:"scopes"`         // OpenClaw scopes, default ["operator.read","operator.write"]
+	Role         string   `toml:"role"`          // OpenClaw role, default "operator"
+	Scopes       []string `toml:"scopes"`        // OpenClaw scopes, default ["operator.read","operator.write"]
 }
 
 type StateConfig struct {
