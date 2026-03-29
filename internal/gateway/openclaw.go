@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -56,7 +57,7 @@ type DeviceInfo struct {
 type Signer interface {
 	DeviceID() string
 	PublicKeyBase64() string
-	Sign(nonce string) (signature string, signedAt int64, err error)
+	Sign(data []byte) []byte
 }
 
 type clientInfo struct {
@@ -195,6 +196,12 @@ func (oc *OpenClaw) Connect(ctx context.Context) error {
 		return fmt.Errorf("parse challenge frame: %w", err)
 	}
 
+	clientID := "gateway-client"
+	clientMode := "backend"
+	role := "operator"
+	scopes := []string{"operator.read", "operator.write"}
+	platform := runtime.GOOS
+
 	// Build device identity if a signer is configured.
 	var deviceInfo *DeviceInfo
 	if oc.signer != nil {
@@ -204,16 +211,13 @@ func (oc *OpenClaw) Connect(ctx context.Context) error {
 			oc.conn = nil
 			return fmt.Errorf("gateway challenge missing nonce")
 		}
-		sig, signedAt, err := oc.signer.Sign(nonce)
-		if err != nil {
-			_ = conn.Close()
-			oc.conn = nil
-			return fmt.Errorf("sign challenge nonce: %w", err)
-		}
+		signedAt := time.Now().UnixMilli()
+		payload := buildDeviceAuthPayloadV3(oc.signer.DeviceID(), clientID, clientMode, role, oc.token, scopes, signedAt, nonce, platform, "")
+		sig := oc.signer.Sign([]byte(payload))
 		deviceInfo = &DeviceInfo{
 			ID:        oc.signer.DeviceID(),
 			PublicKey: oc.signer.PublicKeyBase64(),
-			Signature: sig,
+			Signature: base64.RawURLEncoding.EncodeToString(sig),
 			SignedAt:  signedAt,
 			Nonce:     nonce,
 		}
@@ -228,18 +232,18 @@ func (oc *OpenClaw) Connect(ctx context.Context) error {
 			MinProtocol: 3,
 			MaxProtocol: 3,
 			Client: clientInfo{
-				ID:          "gateway-client",
+				ID:          clientID,
 				DisplayName: "Kapso WhatsApp Bridge",
 				Version:     Version,
-				Platform:    runtime.GOOS,
-				Mode:        "backend",
+				Platform:    platform,
+				Mode:        clientMode,
 			},
 			Auth: authInfo{
 				Token: oc.token,
 			},
 			Device: deviceInfo,
-			Role:   "operator",
-			Scopes: []string{"operator.read", "operator.write"},
+			Role:   role,
+			Scopes: scopes,
 		},
 	}
 
@@ -496,6 +500,26 @@ func (oc *OpenClaw) Close() error {
 		<-done
 	}
 	return err
+}
+
+func buildDeviceAuthPayloadV3(deviceID, clientID, clientMode, role, token string, scopes []string, signedAtMs int64, nonce, platform, deviceFamily string) string {
+	return strings.Join([]string{
+		"v3",
+		deviceID,
+		clientID,
+		clientMode,
+		role,
+		strings.Join(scopes, ","),
+		fmt.Sprintf("%d", signedAtMs),
+		token,
+		nonce,
+		normalizeMetadata(platform),
+		normalizeMetadata(deviceFamily),
+	}, "|")
+}
+
+func normalizeMetadata(s string) string {
+	return strings.ToLower(strings.TrimSpace(s))
 }
 
 // getSessionFile reads sessions.json and returns the path to the active

@@ -151,6 +151,7 @@ func Load() (*Config, error) {
 	}
 
 	applyEnv(&cfg)
+	expandPaths(&cfg)
 	return &cfg, nil
 }
 
@@ -404,6 +405,13 @@ func phoneInRoles(roles map[string][]string, phone string) bool {
 		}
 	}
 	return false
+}
+
+func expandPaths(cfg *Config) {
+	cfg.Gateway.SessionsJSON = expandHome(cfg.Gateway.SessionsJSON)
+	cfg.State.Dir = expandHome(cfg.State.Dir)
+	cfg.Transcribe.BinaryPath = expandHome(cfg.Transcribe.BinaryPath)
+	cfg.Transcribe.ModelPath = expandHome(cfg.Transcribe.ModelPath)
 }
 
 func expandHome(path string) string {
