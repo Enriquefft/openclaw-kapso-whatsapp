@@ -323,6 +323,65 @@ skills/
   whatsapp/                 SKILL.md — agent instructions
 ```
 
+## ❓ FAQ
+
+### What is openclaw-kapso-whatsapp?
+Give your **OpenClaw AI agent a WhatsApp number**. Official Meta Cloud API via Kapso — a unified API for WhatsApp Cloud. No ban risk. Stateless. Two Go binaries. Near-zero idle CPU.
+
+### Architecture
+```
+WhatsApp --> Kapso API --> kapso-whatsapp-bridge --> OpenClaw Gateway --> AI Agent
+   ^                                |
+   +--------------------------------+
+          relay: reads session JSONL, sends reply back
+```
+
+### Key Features
+| Feature | Description |
+|---------|-------------|
+| Official Cloud API | No ban risk (unlike reverse-engineered solutions) |
+| Stateless | No session management, near-zero idle CPU |
+| Two Go Binaries | kapso-whatsapp-cli + kapso-whatsapp-bridge |
+| OpenClaw Integration | WebSocket connection to Gateway |
+| Voice Transcription | Supports voice message transcription |
+| Security | Allowlist, rate limiting, session isolation |
+
+### Installation
+```bash
+curl -fsSL https://raw.githubusercontent.com/Enriquefft/openclaw-kapso-whatsapp/main/scripts/install.sh | bash
+```
+Downloads latest release, verifies SHA256 checksums, installs to ~/.local/bin.
+
+### Configuration
+| File | Purpose |
+|------|---------|
+| kapso-whatsapp-bridge.toml | Bridge configuration |
+| kapso-whatsapp-cli.toml | CLI configuration |
+
+### Delivery Modes
+| Mode | Description |
+|------|-------------|
+| Polling | Poll Kapso API for messages |
+| Webhook | HTTP webhook source |
+| Tailscale | Tailscale Funnel automation |
+
+### Is openclaw-kapso-whatsapp Free?
+Yes, **MIT License**. Open-source.
+
+### Requirements
+- Go (for building from source)
+- Kapso API access
+- OpenClaw Gateway
+
+### Help Resources
+| Channel | Link |
+|---------|------|
+| GitHub | https://github.com/Enriquefft/openclaw-kapso-whatsapp |
+| Kapso | https://kapso.ai |
+| OpenClaw | https://openclaw.ai |
+
+---
+
 ## Contributing
 
 Issues and PRs welcome. Run `just check` before submitting.
